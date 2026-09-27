@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUORİX - Strateji Oyunu</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --cell-color: #334155;
+            --cell-hover: #475569;
+            --p1-color: #ef4444;
+            --p2-color: #3b82f6;
+            --wall-color: #f59e0b;
+            --wall-preview: rgba(245, 158, 11, 0.4);
+            --text-color: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+            color: #38bdf8;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: var(--panel-bg);
+            padding: 12px 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        select, button {
+            background: #475569;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        select:hover, button:hover {
+            background: #64748b;
+        }
+
+        .status-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 15px;
+        }
+
+        .player-card {
+            background: var(--panel-bg);
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-align: center;
+            flex: 1;
+            margin: 0 5px;
+            border: 2px solid transparent;
+        }
+
+        .player-card.active-p1 { border-color: var(--p1-color); }
+        .player-card.active-p2 { border-color: var(--p2-color); }
+
+        .board-container {
+            position: relative;
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(9, 45px 10px) 45px;
+            grid-template-rows: repeat(9, 45px 10px) 45px;
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .cell {
+            background: var(--cell-color);
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+        }
+
+        .cell:hover { background: var(--cell-hover); }
+
+        .cell.valid-move {
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .pawn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            transition: transform 0.2s;
+        }
+
+        .pawn.p1 { background: var(--p1-color); }
+        .pawn.p2 { background: var(--p2-color); }
+
+        /* Duvar Yuvaları */
+        .wall-slot-h {
+            cursor: pointer;
+            border-radius: 2px;
+        }
+
+        .wall-slot-v {
+            cursor: pointer;
+            border-radius: 2px;
+        }
+
+        .wall-slot-intersection {
+            pointer-events: none;
+        }
+
+        .wall-placed {
+            background: var(--wall-color) !important;
+            box-shadow: 0 0 6px var(--wall-color);
+        }
+
+        .wall-preview {
+            background: var(--wall-preview) !important;
+        }
+
+        .wall-preview.invalid {
+            background: rgba(239, 68, 68, 0.4) !important;
+        }
+
+        .turn-info {
+            margin-top: 15px;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>QUORİX</h1>
+
+    <div class="controls">
+        <select id="mode-select" onchange="resetGame()">
+            <option value="pvp">2 Oyuncu (Yerel)</option>
+            <option value="ai-easy">Yapay Zekâ (Kolay)</option>
+            <option value="ai-hard" selected>Yapay Zekâ (Zor)</option>
+        </select>
+        <button onclick="resetGame()">Yeniden Başlat</button>
+    </div>
+
+    <div class="status-panel">
+        <div id="card-p1" class="player-card active-p1">
+            <h3 style="color: var(--p1-color)">Oyuncu 1</h3>
+            <p>Kalan Duvar: <span id="count-red">10</span></p>
+        </div>
+        <div id="card-p2" class="player-card">
+            <h3 style="color: var(--p2-color)" id="p2-name">Oyuncu 2</h3>
+            <p>Kalan Duvar: <span id="count-blue">10</span></p>
+        </div>
+    </div>
+
+    <div class="board-container">
+        <div id="board" class="board"></div>
+    </div>
+
+    <div id="turn-info" class="turn-info">Sıra: Oyuncu 1</div>
+
+    <script>
+        // Oyun Durumu Değişkenleri
+        let turn = 1; // 1 veya 2
+        let p1Pos = { r: 16, c: 8 }; // En alt row (index 16)
+        let p2Pos = { r: 0, c: 8 };  // En üst row (index 0)
+        let p1Walls = 10;
+        let p2Walls = 10;
+        let placedWalls = new Set();
+        let gameOver = false;
+        let aiMode = true;
+        let aiDifficulty = 'hard';
+        let aiThinking = false;
+        let aiScheduleToken = 0;
+        let aiWorker = null;
+
+        const AI_WORKER_SOURCE = `
+        function getNeighbors(pos, walls) {
+            const res = [];
+            const dirs = [
+                { dr: -2, dc: 0, wr: pos.r - 1, wc: pos.c },
+                { dr: 2, dc: 0, wr: pos.r + 1, wc: pos.c },
+                { dr: 0, dc: -2, wr: pos.r, wc: pos.c - 1 },
+                { dr: 0, dc: 2, wr: pos.r, wc: pos.c + 1 }
+            ];
+            for (const d of dirs) {
+                const nr = pos.r + d.dr;
+                const nc = pos.c + d.dc;
+                if (nr >= 0 && nr <= 16 && nc >= 0 && nc <= 16) {
+                    if (!walls.has(d.wr + ',' + d.wc)) {
+                        res.push({ r: nr, c: nc });
+                    }
+                }
+            }
+            return res;
+        }
+
+        function dist(start, targetRow, walls) {
+            const q = [{ pos: start, d: 0 }];
+            const visited = new Set([start.r + ',' + start.c]);
+            while (q.length > 0) {
+                const { pos, d } = q.shift();
+                if (pos.r === targetRow) return d;
+                for (const n of getNeighbors(pos, walls)) {
+                    const key = n.r + ',' + n.c;
+                    if (!visited.has(key)) {
+                        visited.add(key);
+                        q.push({ pos: n, d: d + 1 });
+                    }
+                }
+            }
+            return 999;
+        }
+
+        function pathExists(start, targetRow, walls) {
+            return dist(start, targetRow, walls) < 999;
+        }
+
+        function moves(me, opp, walls) {
+            const basic = getNeighbors(me, walls);
+            const finalMoves = [];
+            for (const n of basic) {
+                if (n.r === opp.r && n.c === opp.c) {
+                    const dr = n.r - me.r;
+                    const dc = n.c - me.c;
+                    const jumpR = n.r + dr;
+                    const jumpC = n.c + dc;
+                    const wallBetween = (me.r + dr/2) + ',' + (me.c + dc/2);
+                    const wallAfter = (n.r + dr/2) + ',' + (n.c + dc/2);
+
+                    if (jumpR >= 0 && jumpR <= 16 && jumpC >= 0 && jumpC <= 16 && !walls.has(wallAfter)) {
+                        finalMoves.push({ r: jumpR, c: jumpC });
+                    }
+                } else {
+                    finalMoves.push(n);
+                }
+            }
+            return finalMoves;
+        }
+
+        function wallCells(r, c, dir) {
+            if (dir === 'h') return [r + ',' + c, r + ',' + (c + 1), r + ',' + (c + 2)];
+            if (dir === 'v') return [r + ',' + c, (r + 1) + ',' + c, (r + 2) + ',' + c];
+            return null;
+        }
+
+        function candidateWalls(s, player) {
+            const wRemaining = player === 1 ? s.w1 : s.w2;
+            if (wRemaining <= 0) return [];
+
+            const anchors = new Set();
+            for (let r = 0; r <= 16; r += 2) {
+                for (let c = 0; c <= 16; c += 2) {
+                    anchors.add(r + ',' + c);
+                }
+            }
+
+            const result = [];
+            for (let r = 0; r <= 16; r++) {
+                for (let c = 0; c <= 16; c++) {
+                    ['h', 'v'].forEach(dir => {
+                        if (dir === 'h' && r % 2 === 1 && c % 2 === 0 && c <= 14) {
+                            const cells = wallCells(r, c, dir);
+                            if (cells && !cells.some(x => s.walls.has(x))) {
+                                const nw = new Set(s.walls);
+                                cells.forEach(x => nw.add(x));
+                                if (pathExists(s.p1, 0, nw) && pathExists(s.p2, 16, nw)) {
+                                    result.push({ type: 'wall', r, c, dir });
+                                }
+                            }
+                        }
+                        if (dir === 'v' && r % 2 === 0 && c % 2 === 1 && r <= 14) {
+                            const cells = wallCells(r, c, dir);
+                            if (cells && !cells.some(x => s.walls.has(x))) {
+                                const nw = new Set(s.walls);
+                                cells.forEach(x => nw.add(x));
+                                if (pathExists(s.p1, 0, nw) && pathExists(s.p2, 16, nw)) {
+                                    result.push({ type: 'wall', r, c, dir });
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            return result;
+        }
+
+        function evaluateState(s, player) {
+            const dMe = dist(player === 1 ? s.p1 : s.p2, player === 1 ? 0 : 16, s.walls);
+            const dOpp = dist(player === 1 ? s.p2 : s.p1, player === 1 ? 16 : 0, s.walls);
+            return (dOpp - dMe) * 10 + ((player === 1 ? s.w1 : s.w2) - (player === 1 ? s.w2 : s.w1));
+        }
+
+        function getBestMove(s, player, difficulty) {
+            const me = player === 1 ? s.p1 : s.p2;
+            const opp = player === 1 ? s.p2 : s.p1;
+            const validPawnMoves = moves(me, opp, s.walls).map(m => ({ type: 'move', r: m.r, c: m.c }));
+
+            if (difficulty === 'easy') {
+                const myGoal = player === 1 ? 0 : 16;
+                let bestMove = validPawnMoves[0];
+                let minD = 999;
+                for (const m of validPawnMoves) {
+                    const d = dist({ r: m.r, c: m.c }, myGoal, s.walls);
+                    if (d < minD) { minD = d; bestMove = m; }
+                }
+                return bestMove || validPawnMoves[0];
+            }
+
+            const cWalls = candidateWalls(s, player);
+            const allMoves = [...validPawnMoves, ...cWalls];
+            if (allMoves.length === 0) return null;
+
+            let bestScore = -Infinity;
+            let bestMove = allMoves[0];
+
+            for (const m of allMoves) {
+                let nextWalls = new Set(s.walls);
+                let nextP1 = { ...s.p1 };
+                let nextP2 = { ...s.p2 };
+                let nextW1 = s.w1;
+                let nextW2 = s.w2;
+
+                if (m.type === 'move') {
+                    if (player === 1) nextP1 = { r: m.r, c: m.c };
+                    else nextP2 = { r: m.r, c: m.c };
+                } else if (m.type === 'wall') {
+                    const cells = wallCells(m.r, m.c, m.dir);
+                    cells.forEach(x => nextWalls.add(x));
+                    if (player === 1) nextW1--; else nextW2--;
+                }
+
+                const nextState = { p1: nextP1, p2: nextP2, w1: nextW1, w2: nextW2, walls: nextWalls };
+
+                if ((player === 1 && nextP1.r === 0) || (player === 2 && nextP2.r === 16)) {
+                    return m;
+                }
+
+                const score = evaluateState(nextState, player);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = m;
+                }
+            }
+            return bestMove;
+        }
+
+        self.onmessage = function(e) {
+            const { state, player, difficulty } = e.data;
+            const move = getBestMove(state, player, difficulty);
+            self.postMessage(move);
+        };
+        `;
+
+        const SFX = {
+            move: () => {},
+            wall: () => {}
+        };
+
+        function getElem(r, c) {
+            return document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+        }
+
+        function createBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+
+            for (let r = 0; r <= 16; r++) {
+                for (let c = 0; c <= 16; c++) {
+                    const div = document.createElement('div');
+                    div.dataset.row = r;
+                    div.dataset.col = c;
+
+                    if (r % 2 === 0 && c % 2 === 0) {
+                        div.className = 'cell';
+                        div.onclick = () => handleCellClick(r, c);
+                    } else if (r % 2 === 1 && c % 2 === 0) {
+                        div.className = 'wall-slot-h';
+                        div.onmouseenter = () => previewWall(r, c, 'h', true);
+                        div.onmouseleave = () => previewWall(r, c, 'h', false);
+                        div.onclick = () => placeWall(r, c, 'h');
+                    } else if (r % 2 === 0 && c % 2 === 1) {
+                        div.className = 'wall-slot-v';
+                        div.onmouseenter = () => previewWall(r, c, 'v', true);
+                        div.onmouseleave = () => previewWall(r, c, 'v', false);
+                        div.onclick = () => placeWall(r, c, 'v');
+                    } else {
+                        div.className = 'wall-slot-intersection';
+                    }
+
+                    boardEl.appendChild(div);
+                }
+            }
+            renderPawns();
+            highlightValidMoves();
+        }
+
+        function renderPawns() {
+            document.querySelectorAll('.pawn').forEach(e => e.remove());
+
+            const p1Cell = getElem(p1Pos.r, p1Pos.c);
+            if (p1Cell) {
+                const pawn1 = document.createElement('div');
+                pawn1.className = 'pawn p1';
+                p1Cell.appendChild(pawn1);
+            }
+
+            const p2Cell = getElem(p2Pos.r, p2Pos.c);
+            if (p2Cell) {
+                const pawn2 = document.createElement('div');
+                pawn2.className = 'pawn p2';
+                p2Cell.appendChild(pawn2);
+            }
+        }
+
+        function getWallCells(r, c, dir) {
+            if (dir === 'h' && c <= 14) return [`${r},${c}`, `${r},${c+1}`, `${r},${c+2}`];
+            if (dir === 'v' && r <= 14) return [`${r},${c}`, `${r+1},${c}`, `${r+2},${c}`];
+            return null;
+        }
+
+        function canPlaceWall(r, c, dir) {
+            const currentWalls = turn === 1 ? p1Walls : p2Walls;
+            if (currentWalls <= 0) return false;
+
+            const cells = getWallCells(r, c, dir);
+            if (!cells) return false;
+
+            if (cells.some(key => placedWalls.has(key))) return false;
+
+            // Yol Engel Kontrolü (BFS)
+            const testWalls = new Set(placedWalls);
+            cells.forEach(k => testWalls.add(k));
+
+            return checkPath(p1Pos, 0, testWalls) && checkPath(p2Pos, 16, testWalls);
+        }
+
+        function checkPath(start, targetRow, walls) {
+            const q = [start];
+            const visited = new Set([`${start.r},${start.c}`]);
+
+            while (q.length > 0) {
+                const curr = q.shift();
+                if (curr.r === targetRow) return true;
+
+                const dirs = [
+                    { dr: -2, dc: 0, wr: curr.r - 1, wc: curr.c },
+                    { dr: 2, dc: 0, wr: curr.r + 1, wc: curr.c },
+                    { dr: 0, dc: -2, wr: curr.r, wc: curr.c - 1 },
+                    { dr: 0, dc: 2, wr: curr.r, wc: curr.c + 1 }
+                ];
+
+                for (const d of dirs) {
+                    const nr = curr.r + d.dr;
+                    const nc = curr.c + d.dc;
+                    if (nr >= 0 && nr <= 16 && nc >= 0 && nc <= 16) {
+                        if (!walls.has(`${d.wr},${d.wc}`)) {
+                            const key = `${nr},${nc}`;
+                            if (!visited.has(key)) {
+                                visited.add(key);
+                                q.push({ r: nr, c: nc });
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function previewWall(r, c, dir, show) {
+            if (gameOver || (aiMode && turn === 2)) return;
+            const cells = getWallCells(r, c, dir);
+            if (!cells) return;
+
+            const isValid = canPlaceWall(r, c, dir);
+            cells.forEach(key => {
+                const [row, col] = key.split(',');
+                const el = getElem(row, col);
+                if (el && !placedWalls.has(key)) {
+                    if (show) {
+                        el.classList.add('wall-preview');
+                        if (!isValid) el.classList.add('invalid');
+                    } else {
+                        el.classList.remove('wall-preview', 'invalid');
+                    }
+                }
+            });
+        }
+
+        function placeWall(r, c, dir) {
+            if (gameOver || (aiMode && turn === 2)) return;
+            if (!canPlaceWall(r, c, dir)) return;
+
+            const cells = getWallCells(r, c, dir);
+            cells.forEach(key => {
+                placedWalls.add(key);
+                const [row, col] = key.split(',');
+                const el = getElem(row, col);
+                if (el) {
+                    el.classList.remove('wall-preview', 'invalid');
+                    el.classList.add('wall-placed');
+                }
+            });
+
+            if (turn === 1) {
+                p1Walls--;
+                document.getElementById('count-red').innerText = p1Walls;
+            } else {
+                p2Walls--;
+                document.getElementById('count-blue').innerText = p2Walls;
+            }
+
+            switchTurn();
+        }
+
+        function getValidMoves(pawn, opponent) {
+            const valid = [];
+            const dirs = [
+                { dr: -2, dc: 0, wr: pawn.r - 1, wc: pawn.c },
+                { dr: 2, dc: 0, wr: pawn.r + 1, wc: pawn.c },
+                { dr: 0, dc: -2, wr: pawn.r, wc: pawn.c - 1 },
+                { dr: 0, dc: 2, wr: pawn.r, wc: pawn.c + 1 }
+            ];
+
+            for (const d of dirs) {
+                const nr = pawn.r + d.dr;
+                const nc = pawn.c + d.dc;
+
+                if (nr >= 0 && nr <= 16 && nc >= 0 && nc <= 16) {
+                    if (!placedWalls.has(`${d.wr},${d.wc}`)) {
+                        if (nr === opponent.r && nc === opponent.c) {
+                            const jumpR = nr + d.dr;
+                            const jumpC = nc + d.dc;
+                            const wallAfter = `${nr + d.dr/2},${nc + d.dc/2}`;
+                            if (jumpR >= 0 && jumpR <= 16 && jumpC >= 0 && jumpC <= 16 && !placedWalls.has(wallAfter)) {
+                                valid.push({ r: jumpR, c: jumpC });
+                            }
+                        } else {
+                            valid.push({ r: nr, c: nc });
+                        }
+                    }
+                }
+            }
+            return valid;
+        }
+
+        function highlightValidMoves() {
+            document.querySelectorAll('.cell').forEach(el => el.classList.remove('valid-move'));
+            if (gameOver || (aiMode && turn === 2)) return;
+
+            const currPos = turn === 1 ? p1Pos : p2Pos;
+            const oppPos = turn === 1 ? p2Pos : p1Pos;
+            const validMoves = getValidMoves(currPos, oppPos);
+
+            validMoves.forEach(m => {
+                const el = getElem(m.r, m.c);
+                if (el) el.classList.add('valid-move');
+            });
+        }
+
+        function handleCellClick(r, c) {
+            if (gameOver || (aiMode && turn === 2)) return;
+
+            const currPos = turn === 1 ? p1Pos : p2Pos;
+            const oppPos = turn === 1 ? p2Pos : p1Pos;
+            const validMoves = getValidMoves(currPos, oppPos);
+
+            const isMoveValid = validMoves.some(m => m.r === r && m.c === c);
+
+            if (isMoveValid) {
+                if (turn === 1) p1Pos = { r, c };
+                else p2Pos = { r, c };
+
+                renderPawns();
+                checkWin();
+                if (!gameOver) switchTurn();
+            }
+        }
+
+        function switchTurn() {
+            turn = turn === 1 ? 2 : 1;
+            document.getElementById('card-p1').className = `player-card ${turn === 1 ? 'active-p1' : ''}`;
+            document.getElementById('card-p2').className = `player-card ${turn === 2 ? 'active-p2' : ''}`;
+            document.getElementById('turn-info').innerText = `Sıra: Oyuncu ${turn}`;
+
+            highlightValidMoves();
+
+            if (aiMode && turn === 2 && !gameOver) {
+                scheduleAI();
+            }
+        }
+
+        function checkWin() {
+            if (p1Pos.r === 0) {
+                document.getElementById('turn-info').innerText = '🎉 TEPBRİKLER! Oyuncu 1 Kazandı!';
+                gameOver = true;
+            } else if (p2Pos.r === 16) {
+                document.getElementById('turn-info').innerText = '🎉 TEBRİKLER! Oyuncu 2 Kazandı!';
+                gameOver = true;
+            }
+            if (gameOver) highlightValidMoves();
+        }
+
+        function scheduleAI() {
+            if (!aiMode || turn !== 2 || gameOver || aiThinking) return;
+            aiThinking = true;
+
+            const token = ++aiScheduleToken;
+            const state = {
+                p1: { ...p1Pos },
+                p2: { ...p2Pos },
+                w1: p1Walls,
+                w2: p2Walls,
+                walls: new Set(placedWalls)
+            };
+
+            const blob = new Blob([AI_WORKER_SOURCE], { type: 'application/javascript' });
+            const workerUrl = URL.createObjectURL(blob);
+            if (aiWorker) aiWorker.terminate();
+            aiWorker = new Worker(workerUrl);
+
+            setTimeout(() => {
+                if (token !== aiScheduleToken || gameOver) {
+                    aiThinking = false;
+                    return;
+                }
+                aiWorker.postMessage({ state, player: 2, difficulty: aiDifficulty });
+            }, 300);
+
+            aiWorker.onmessage = function(e) {
+                URL.revokeObjectURL(workerUrl);
+                if (token !== aiScheduleToken || gameOver) {
+                    aiThinking = false;
+                    return;
+                }
+                aiThinking = false;
+                const action = e.data;
+                if (!action) return;
+
+                if (action.type === 'move') {
+                    p2Pos = { r: action.r, c: action.c };
+                    renderPawns();
+                    checkWin();
+                    if (!gameOver) switchTurn();
+                } else if (action.type === 'wall') {
+                    const cells = getWallCells(action.r, action.c, action.dir);
+                    if (cells) {
+                        cells.forEach(key => {
+                            placedWalls.add(key);
+                            const [row, col] = key.split(',');
+                            const el = getElem(row, col);
+                            if (el) el.classList.add('wall-placed');
+                        });
+                        p2Walls--;
+                        document.getElementById('count-blue').innerText = p2Walls;
+                        switchTurn();
+                    }
+                }
+            };
+        }
+
+        function resetGame() {
+            const mode = document.getElementById('mode-select').value;
+            aiMode = mode.startsWith('ai');
+            aiDifficulty = mode === 'ai-easy' ? 'easy' : 'hard';
+            document.getElementById('p2-name').innerText = aiMode ? 'Yapay Zekâ' : 'Oyuncu 2';
+
+            turn = 1;
+            p1Pos = { r: 16, c: 8 };
+            p2Pos = { r: 0, c: 8 };
+            p1Walls = 10;
+            p2Walls = 10;
+            placedWalls.clear();
+            gameOver = false;
+            aiThinking = false;
+
+            document.getElementById('count-red').innerText = '10';
+            document.getElementById('count-blue').innerText = '10';
+            document.getElementById('card-p1').className = 'player-card active-p1';
+            document.getElementById('card-p2').className = 'player-card';
+            document.getElementById('turn-info').innerText = 'Sıra: Oyuncu 1';
+
+            createBoard();
+        }
+
+        // Oyunu Başlat
+        resetGame();
+    </script>
+</body>
+</html>

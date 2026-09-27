@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quorix</title>
+    <style>
+        :root {
+            --cell-size: 54px;
+            --gap-size: 14px;
+            --board-bg: #2a1d15;
+            --cell-bg: #4a3728;
+            --cell-hover: #5a4535;
+            --groove-bg: #0f0805;
+            --red-pawn: #d32f2f;
+            --blue-pawn: #1976d2;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #121212;
+            background-image: 
+                radial-gradient(circle at 50% 30%, #2a2018 0%, transparent 60%),
+                radial-gradient(circle at 50% 70%, #1a1410 0%, transparent 60%),
+                #0a0a0a;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            user-select: none;
+            padding: 20px;
+        }
+
+        .game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .wall-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 12px 32px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            opacity: 0.4;
+            transform: scale(0.95);
+            border: 1px solid rgba(255,255,255,0.1);
+            background: #2a2a2a;
+        }
+
+        .wall-badge.active-turn {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .badge-red.active-turn { border-color: #ff4d4d; box-shadow: 0 0 20px rgba(255, 77, 77, 0.3); }
+        .badge-blue.active-turn { border-color: #007aff; box-shadow: 0 0 20px rgba(0, 122, 255, 0.3); }
+
+        .board-container {
+            background: linear-gradient(145deg, #3e2b20 0%, #2a1d15 50%, #1a110a 100%);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 
+                0 30px 80px rgba(0, 0, 0, 0.9),
+                0 15px 30px rgba(0, 0, 0, 0.7),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                inset 0 -2px 0 rgba(0, 0, 0, 0.5),
+                inset 0 0 40px rgba(0, 0, 0, 0.6);
+            border: 1px solid #5d4037;
+            position: relative;
+        }
+
+        .board-container::before {
+            content: '';
+            position: absolute;
+            inset: 4px;
+            border-radius: 8px;
+            border: 1px solid rgba(141, 110, 78, 0.2);
+            pointer-events: none;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(10, var(--cell-size) var(--gap-size)) var(--cell-size);
+            grid-template-rows: repeat(10, var(--cell-size) var(--gap-size)) var(--cell-size);
+            gap: 0;
+            background-color: var(--board-bg);
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background: linear-gradient(135deg, #55402e 0%, var(--cell-bg) 50%, #3a2818 100%);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 
+                inset 2px 2px 5px rgba(0, 0, 0, 0.7), 
+                inset -1px -1px 2px rgba(255, 255, 255, 0.06),
+                0 1px 0 rgba(255, 255, 255, 0.04);
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .cell:hover {
+            background: linear-gradient(135deg, #65503e 0%, var(--cell-hover) 50%, #4a3828 100%);
+        }
+
+        .cell.target-red { 
+            background: linear-gradient(135deg, #6a3030 0%, #4a2020 50%, #3a1515 100%);
+            box-shadow: inset 0 0 15px rgba(255, 0, 0, 0.25), inset 2px 2px 5px rgba(0,0,0,0.7);
+        }
+        .cell.target-blue { 
+            background: linear-gradient(135deg, #303a6a 0%, #202a4a 50%, #151a3a 100%);
+            box-shadow: inset 0 0 15px rgba(0, 100, 255, 0.25), inset 2px 2px 5px rgba(0,0,0,0.7);
+        }
+
+        .cell.valid-move::after {
+            content: '';
+            width: 18px;
+            height: 18px;
+            background: radial-gradient(circle, #2ecc71 0%, #27ae60 70%);
+            border-radius: 50%;
+            box-shadow: 0 0 12px #2ecc71, 0 0 20px rgba(46, 204, 113, 0.5);
+            animation: pulse 1.2s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(0.8); opacity: 0.6; }
+            to { transform: scale(1.1); opacity: 1; }
+        }
+
+        .wall-space-h, .wall-space-v {
+            background: linear-gradient(90deg, #0f0805 0%, #1a0f08 50%, #0f0805 100%);
+            cursor: pointer;
+            transition: background 0.15s;
+            box-shadow: 
+                inset 1px 1px 3px rgba(0,0,0,0.95), 
+                inset -1px -1px 2px rgba(255,255,255,0.03);
+            position: relative;
+        }
+        
+        .wall-space-h {
+            background: linear-gradient(180deg, #0f0805 0%, #1a0f08 50%, #0f0805 100%);
+        }
+        
+        .wall-space-h:hover, .wall-space-v:hover {
+            background: #2a1f15;
+        }
+
+        /* Mouse ile üzerine gelince görünen hayalet duvar */
+        .wall-preview {
+            background: linear-gradient(180deg, rgba(255, 205, 120, .48), rgba(190, 100, 25, .42)) !important;
+            box-shadow: 0 0 12px rgba(255, 174, 60, .38), inset 0 1px 0 rgba(255,255,255,.3);
+        }
+
+        /* Geçersiz yere gelince başka tarafa kaydırmak yerine hafif kırmızı göster */
+        .invalid {
+            background: rgba(210, 55, 55, .22) !important;
+        }
+
+        .wall-dot {
+            background: var(--groove-bg) !important;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.95);
+            pointer-events: none;
+        }
+
+        .pawn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            flex: 0 0 30px;
+            z-index: 5;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+
+        /* Taş hareket animasyonu — oyun mantığına dokunmaz. */
+        @keyframes pawnMove {
+            0% {
+                transform: translate(var(--pawn-start-x, 0px), var(--pawn-start-y, 0px)) scale(.92);
+                filter: brightness(1.08);
+            }
+            58% {
+                transform: translate(0, 0) scale(1.06);
+                filter: brightness(1.12);
+            }
+            100% {
+                transform: translate(0, 0) scale(1);
+                filter: brightness(1);
+            }
+        }
+
+        .pawn.pawn-moving {
+            animation: pawnMove .30s cubic-bezier(.22,.72,.22,1) both;
+        }
+
+        /* AI hamlesi: normal oyuncu piyonu ile aynı akıcı hareket. */
+        .pawn.pawn-ai-moving {
+            animation: pawnMove .30s cubic-bezier(.22,.72,.22,1) both;
+            will-change: transform, filter;
+            backface-visibility: hidden;
+            transform-origin: center center;
+        }
+
+        .pawn-red { 
+            background: radial-gradient(circle at 35% 30%, #ff8585 0%, #ff5252 25%, var(--red-pawn) 60%, #8b1a1a 100%);
+            box-shadow: 
+                0 3px 6px rgba(0, 0, 0, 0.55),
+                inset 0 1px 2px rgba(255, 200, 200, 0.38),
+                0 0 15px rgba(211, 47, 47, 0.4);
+        }
+        .pawn-blue { 
+            background: radial-gradient(circle at 35% 30%, #90caf9 0%, #42a5f5 25%, var(--blue-pawn) 60%, #0d47a1 100%);
+            box-shadow: 
+                0 3px 6px rgba(0, 0, 0, 0.55),
+                inset 0 1px 2px rgba(200, 220, 255, 0.38),
+                0 0 15px rgba(25, 118, 210, 0.4);
+        }
+
+        /* ============================================================ */
+        /* === DÜZ DİKDÖRTGEN DUVAR - TEK PARÇA, ÇIKINTISIZ === */
+        /* ============================================================ */
+        .wall-placed {
+            position: relative !important;
+            z-index: 20 !important;
+            /* Tüm parçalarda aynı düz gradient (yatay duvar için) */
+            background: linear-gradient(180deg, #e9c98f 0%, #d3a868 45%, #b98a4a 100%) !important;
+            border: 1px solid #6b4423 !important;
+            /* Sadece iç eğim + bulaşmayan sert alt gölge (ek yeri kararması yapmaz) */
+            box-shadow:
+                inset 0 1px 0 rgba(255, 240, 200, 0.45),
+                inset 0 -1px 0 rgba(60, 30, 10, 0.5),
+                0 2px 0 rgba(0, 0, 0, 0.4) !important;
+            animation: wallSettle 0.42s cubic-bezier(.2,.85,.25,1);
+        }
+
+        @keyframes wallSettle {
+            0% {
+                opacity: 0;
+                clip-path: inset(48% 48% 48% 48% round 4px);
+                filter: brightness(1.45);
+                box-shadow: 0 0 0 rgba(255,220,150,0);
+            }
+            55% {
+                opacity: 1;
+                clip-path: inset(0 0 0 0 round 4px);
+                filter: brightness(1.16);
+                box-shadow: 0 0 18px rgba(244,195,115,.28), 0 3px 0 rgba(0,0,0,.42);
+            }
+            78% {
+                filter: brightness(1.04);
+                box-shadow: inset 0 1px 0 rgba(255,240,200,.45), inset 0 -1px 0 rgba(60,30,10,.5), 0 2px 0 rgba(0,0,0,.42);
+            }
+            100% {
+                opacity: 1;
+                clip-path: inset(0 0 0 0 round 4px);
+                filter: brightness(1);
+            }
+        }
+
+        /* Duvar yerine otururken üç parça tek bir şerit gibi açılır. */
+        .wall-piece-h-start.wall-placed,
+        .wall-piece-h-mid.wall-placed,
+        .wall-piece-h-end.wall-placed {
+            animation: wallSettleH .34s cubic-bezier(.18,.9,.24,1) both;
+        }
+        .wall-piece-v-start.wall-placed,
+        .wall-piece-v-mid.wall-placed,
+        .wall-piece-v-end.wall-placed {
+            animation: wallSettleV .34s cubic-bezier(.18,.9,.24,1) both;
+        }
+        .wall-piece-h-mid.wall-placed { animation-delay: .035s; }
+        .wall-piece-h-end.wall-placed { animation-delay: .07s; }
+        .wall-piece-v-mid.wall-placed { animation-delay: .035s; }
+        .wall-piece-v-end.wall-placed { animation-delay: .07s; }
+
+        @keyframes wallSettleH {
+            0% { opacity: 0; transform: scaleX(.18); filter: brightness(1.5); }
+            60% { opacity: 1; transform: scaleX(1.045); filter: brightness(1.12); }
+            82% { transform: scaleX(.985); filter: brightness(1.02); }
+            100% { opacity: 1; transform: scaleX(1); filter: brightness(1); }
+        }
+        @keyframes wallSettleV {
+            0% { opacity: 0; transform: scaleY(.18); filter: brightness(1.5); }
+            60% { opacity: 1; transform: scaleY(1.045); filter: brightness(1.12); }
+            82% { transform: scaleY(.985); filter: brightness(1.02); }
+            100% { opacity: 1; transform: scaleY(1); filter: brightness(1); }
+        }
+
+        /* Dikey duvarlarda gradient yönü yatay olsun ki 3 parça aynı hizalansın */
+        .wall-piece-v-start,
+        .wall-piece-v-mid,
+        .wall-piece-v-end {
+            background: linear-gradient(90deg, #e9c98f 0%, #d3a868 45%, #b98a4a 100%) !important;
+            box-shadow:
+                inset 1px 0 0 rgba(255, 240, 200, 0.45),
+                inset -1px 0 0 rgba(60, 30, 10, 0.5),
+                0 2px 0 rgba(0, 0, 0, 0.4) !important;
+        }
+
+        /* EK YERLERİ: iç kenarlarda border YOK, sadece dış uçlar yuvarlak */
+        .wall-piece-h-start { border-right: 0 !important; border-radius: 4px 0 0 4px !important; }
+        .wall-piece-h-mid   { border-left: 0 !important; border-right: 0 !important; border-radius: 0 !important; }
+        .wall-piece-h-end   { border-left: 0 !important; border-radius: 0 4px 4px 0 !important; }
+
+        .wall-piece-v-start { border-bottom: 0 !important; border-radius: 4px 4px 0 0 !important; }
+        .wall-piece-v-mid   { border-top: 0 !important; border-bottom: 0 !important; border-radius: 0 !important; }
+        .wall-piece-v-end   { border-top: 0 !important; border-radius: 0 0 4px 4px !important; }
+
+        /* Çıkıntı yapan tüm sahte elemanları tamamen kaldır */
+        .wall-placed::before,
+        .wall-placed::after,
+        .wall-dot.wall-placed::before,
+        .wall-dot.wall-placed::after {
+            content: none !important;
+            display: none !important;
+        }
+
+        /* Önizleme: düz, yarı saydam şerit (ek yeri çizgisi yok) */
+        .wall-preview {
+            position: relative !important;
+            z-index: 15 !important;
+            background: rgba(233, 201, 143, 0.5) !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            animation: previewPulse 1s infinite alternate;
+        }
+
+        @keyframes previewPulse {
+            from { opacity: 0.55; }
+            to { opacity: 0.85; }
+        }
+
+        .wall-preview.invalid {
+            background: rgba(220, 80, 80, 0.55) !important;
+        }
+
+
+        .match-stats{display:grid;grid-template-columns:repeat(4,minmax(82px,1fr));gap:8px;margin:18px 0 10px;width:min(560px,92vw);}
+        .stat-item{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:72px;padding:9px 6px;border-radius:14px;background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}
+        .stat-item span{font-size:1rem;margin-bottom:2px}.stat-item b{font-size:1.15rem;color:#fff}.stat-item small{font-size:.65rem;color:rgba(255,255,255,.62);margin-top:2px}.stat-wide{grid-column:1/-1;min-height:58px;flex-direction:row;gap:9px}.stat-wide small{margin-top:0}
+        @media(max-width:560px){.match-stats{grid-template-columns:repeat(2,1fr)}.stat-wide{grid-column:1/-1}}
+        .winner-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            background: radial-gradient(circle at center, rgba(20,18,15,.38), rgba(0,0,0,.68));
+            backdrop-filter: blur(6px);
+            overflow: hidden;
+        }
+        .winner-overlay.show { display: flex; animation: winnerFadeIn .28s ease-out both; }
+        .winner-overlay::before, .winner-overlay::after {
+            content:""; position:absolute; width:260px; height:260px; border-radius:50%;
+            filter:blur(55px); opacity:.18; pointer-events:none;
+            animation:winnerAura 2.2s ease-in-out infinite alternate;
+        }
+        .winner-overlay::before { background:#ff4d4d; transform:translate(-240px,-90px); }
+        .winner-overlay::after { background:#3b8cff; transform:translate(240px,90px); }
+        .winner-overlay.red::before { opacity:.38; }
+        .winner-overlay.red::after { opacity:.06; }
+        .winner-overlay.blue::before { opacity:.06; }
+        .winner-overlay.blue::after { opacity:.38; }
+        .winner-box {
+            position:relative; min-width:min(760px,88vw); padding:30px 46px 25px;
+            border-radius:28px; text-align:center; overflow:hidden;
+            background:linear-gradient(145deg,rgba(43,35,28,.98),rgba(15,12,10,.98));
+            border:1px solid rgba(255,255,255,.22);
+            box-shadow:0 30px 90px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.08);
+            animation:winnerPop .58s cubic-bezier(.16,1.25,.3,1) both;
+        }
+        .winner-box::before {
+            content:""; position:absolute; inset:0; background:linear-gradient(120deg,transparent 20%,rgba(255,255,255,.08) 48%,transparent 70%);
+            transform:translateX(-120%); animation:winnerShine 1.1s .25s ease-out forwards; pointer-events:none;
+        }
+        .winner-crown { font-size:clamp(3rem,7vw,5rem); line-height:1; filter:drop-shadow(0 8px 12px rgba(0,0,0,.55)); animation:crownBounce .7s .12s cubic-bezier(.2,1.5,.3,1) both; }
+        .winner-kicker { margin-top:10px; font-size:.8rem; font-weight:900; letter-spacing:5px; color:rgba(255,255,255,.55); }
+        .winner-title { margin-top:6px; font-size:clamp(2rem,5vw,4.5rem); font-weight:1000; letter-spacing:1px; line-height:1.05; text-shadow:0 5px 18px rgba(0,0,0,.75); }
+        .winner-overlay.red .winner-title { color:#ff5b5b; text-shadow:0 0 28px rgba(255,70,70,.48),0 5px 18px rgba(0,0,0,.75); }
+        .winner-overlay.blue .winner-title { color:#55aaff; text-shadow:0 0 28px rgba(55,145,255,.48),0 5px 18px rgba(0,0,0,.75); }
+        .winner-subtitle { margin-top:12px; color:rgba(255,255,255,.72); font-size:clamp(.9rem,2vw,1.15rem); font-weight:700; }
+        .winner-line { display:flex; align-items:center; gap:12px; justify-content:center; margin-top:20px; color:rgba(255,255,255,.35); font-size:.72rem; letter-spacing:3px; }
+        .winner-line span { width:90px; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.3)); }
+        .winner-line span:last-child { transform:scaleX(-1); }
+        @keyframes winnerFadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes winnerPop { from{opacity:0;transform:translateY(24px) scale(.78)} 65%{transform:translateY(-4px) scale(1.025)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes crownBounce { from{opacity:0;transform:translateY(-25px) scale(.55) rotate(-8deg)} 70%{transform:translateY(3px) scale(1.08) rotate(2deg)} to{opacity:1;transform:translateY(0) scale(1) rotate(0)} }
+        @keyframes winnerShine { to{transform:translateX(120%)} }
+        @keyframes winnerAura { from{scale:.92;opacity:.12} to{scale:1.08;opacity:.24} }
+
+        .status-msg {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #f5e0dc;
+            min-height: 32px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+            letter-spacing: 0.5px;
+        }
+    
+        .controls { 
+            display: flex; 
+            gap: 16px; 
+            align-items: center; 
+            justify-content: center; 
+            flex-wrap: wrap;
+        }
+        
+        .control-btn { 
+            background: linear-gradient(145deg, #3a3a3a, #2a2a2a); 
+            color: #fff; 
+            border: 1px solid #555; 
+            border-radius: 10px; 
+            padding: 10px 24px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: all 0.2s; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .control-btn:hover { 
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a); 
+            border-color: #777; 
+            transform: translateY(-2px); 
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        }
+
+        .wall-help { 
+            color: #888; 
+            font-size: 0.85rem; 
+            font-weight: 500;
+        }
+    
+/* === DUVAR ÜZERİNE MOUSE GELİNCE BOZULMASIN ===
+   Eski .wall-space-h:hover / .wall-space-v:hover kuralları
+   yerleştirilmiş duvarın rengini ezmesin. */
+.wall-space-h.wall-placed:hover,
+.wall-space-v.wall-placed:hover,
+.wall-dot.wall-placed:hover {
+    background: linear-gradient(180deg, #e9c98f 0%, #d3a868 45%, #b98a4a 100%) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 240, 200, 0.45),
+        inset 0 -1px 0 rgba(60, 30, 10, 0.5),
+        0 2px 0 rgba(0, 0, 0, 0.4) !important;
+}
+
+.wall-space-v.wall-placed:hover,
+.wall-dot.wall-placed.wall-piece-v-start:hover,
+.wall-dot.wall-placed.wall-piece-v-mid:hover,
+.wall-dot.wall-placed.wall-piece-v-end:hover {
+    background: linear-gradient(90deg, #e9c98f 0%, #d3a868 45%, #b98a4a 100%) !important;
+}
+
+/* Yerleştirilmiş duvar artık hover önizlemesi gibi davranmasın. */
+.wall-space-h.wall-placed:hover,
+.wall-space-v.wall-placed:hover {
+    cursor: default !important;
+}
+
+
+/* Yerleşmiş duvarın üstüne gelince hiçbir hover görünümü uygulanmasın. */
+.wall-space-h.wall-placed:hover,
+.wall-space-v.wall-placed:hover,
+.wall-dot.wall-placed:hover,
+.wall-piece-h-start.wall-placed:hover,
+.wall-piece-h-mid.wall-placed:hover,
+.wall-piece-h-end.wall-placed:hover,
+.wall-piece-v-start.wall-placed:hover,
+.wall-piece-v-mid.wall-placed:hover,
+.wall-piece-v-end.wall-placed:hover {
+    filter: none !important;
+    opacity: 1 !important;
+    animation: none !important;
+    transition: none !important;
+}
+
+
+/* ===== YERLEŞMİŞ DUVARI TEK, DÜZ VE SABİT PARÇA YAP ===== */
+.wall-space-h.wall-placed,
+.wall-space-v.wall-placed,
+.wall-dot.wall-placed {
+    pointer-events: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    animation: none !important;
+    transition: none !important;
+    z-index: 30 !important;
+}
+
+/* Yatay duvarın tüm 3 parçası birebir aynı yüzey */
+.wall-space-h.wall-placed,
+.wall-dot.wall-placed.wall-piece-h-mid,
+.wall-piece-h-start.wall-placed,
+.wall-piece-h-mid.wall-placed,
+.wall-piece-h-end.wall-placed {
+    background: linear-gradient(180deg,#f0d29a 0%,#d7aa68 50%,#b87f40 100%) !important;
+    border-top: 1px solid #8a5a2e !important;
+    border-bottom: 1px solid #6f431f !important;
+    box-shadow: inset 0 1px 0 rgba(255,245,215,.45), 0 2px 0 rgba(0,0,0,.42) !important;
+}
+
+/* Dikey duvarın tüm 3 parçası birebir aynı yüzey */
+.wall-space-v.wall-placed,
+.wall-dot.wall-placed.wall-piece-v-mid,
+.wall-piece-v-start.wall-placed,
+.wall-piece-v-mid.wall-placed,
+.wall-piece-v-end.wall-placed {
+    background: linear-gradient(90deg,#b87f40 0%,#d7aa68 50%,#f0d29a 100%) !important;
+    border-left: 1px solid #6f431f !important;
+    border-right: 1px solid #8a5a2e !important;
+    box-shadow: inset 1px 0 0 rgba(255,245,215,.45), 2px 0 0 rgba(0,0,0,.42) !important;
+}
+
+/* Merkez parça kesinlikle nokta/yuvarlak/groove olmasın */
+.wall-dot.wall-placed {
+    border-radius: 0 !important;
+    margin: 0 !important;
+}
+.wall-dot.wall-placed::before,
+.wall-dot.wall-placed::after,
+.wall-piece-h-mid.wall-placed::before,
+.wall-piece-h-mid.wall-placed::after,
+.wall-piece-v-mid.wall-placed::before,
+.wall-piece-v-mid.wall-placed::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* Uçlar yuvarlak, merkez tamamen düz */
+.wall-piece-h-start.wall-placed { border-radius: 5px 0 0 5px !important; }
+.wall-piece-h-mid.wall-placed { border-radius: 0 !important; border-left: 0 !important; border-right: 0 !important; }
+.wall-piece-h-end.wall-placed { border-radius: 0 5px 5px 0 !important; }
+.wall-piece-v-start.wall-placed { border-radius: 5px 5px 0 0 !important; }
+.wall-piece-v-mid.wall-placed { border-radius: 0 !important; border-top: 0 !important; border-bottom: 0 !important; }
+.wall-piece-v-end.wall-placed { border-radius: 0 0 5px 5px !important; }
+
+
+/* ===== GELİŞMİŞ ZEMİN / TAHTA DERİNLİĞİ — DUVARA DOKUNMAZ ===== */
+.board-container {
+    background:
+        linear-gradient(145deg, rgba(255,220,165,.10), transparent 22%),
+        linear-gradient(325deg, rgba(0,0,0,.30), transparent 38%),
+        linear-gradient(145deg, #493326 0%, #302117 48%, #1b1009 100%) !important;
+    border: 1px solid #6b4934 !important;
+    box-shadow:
+        0 28px 65px rgba(0,0,0,.92),
+        0 12px 25px rgba(0,0,0,.75),
+        inset 0 2px 0 rgba(255,240,210,.13),
+        inset 0 -4px 0 rgba(0,0,0,.55),
+        inset 0 0 32px rgba(0,0,0,.48) !important;
+}
+
+.board-container::before {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,224,180,.075);
+    box-shadow:
+        inset 0 2px 0 rgba(255,255,255,.045),
+        inset 0 -3px 0 rgba(0,0,0,.28);
+    pointer-events: none;
+}
+
+#board {
+    background:
+        linear-gradient(135deg, rgba(255,235,195,.035), transparent 35%),
+        linear-gradient(315deg, rgba(0,0,0,.16), transparent 42%),
+        #21150e !important;
+    border-radius: 5px !important;
+    box-shadow:
+        inset 0 2px 0 rgba(255,255,255,.055),
+        inset 2px 0 0 rgba(255,255,255,.025),
+        inset -3px -3px 0 rgba(0,0,0,.42),
+        inset 0 0 24px rgba(0,0,0,.62),
+        0 3px 0 rgba(0,0,0,.55),
+        0 7px 14px rgba(0,0,0,.38) !important;
+}
+
+.cell {
+    background:
+        linear-gradient(145deg, rgba(255,220,165,.055), transparent 32%),
+        linear-gradient(325deg, rgba(0,0,0,.18), transparent 55%),
+        linear-gradient(135deg, #5a4431 0%, var(--cell-bg) 48%, #352317 100%) !important;
+    border-radius: 3px !important;
+    box-shadow:
+        inset 2px 2px 5px rgba(0,0,0,.72),
+        inset -1px -1px 2px rgba(255,255,255,.065),
+        inset 0 -2px 4px rgba(0,0,0,.30),
+        0 1px 0 rgba(255,255,255,.045),
+        0 2px 0 rgba(0,0,0,.28) !important;
+}
+
+.cell::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: 2px;
+    pointer-events: none;
+    border-top: 1px solid rgba(255,245,220,.055);
+    border-left: 1px solid rgba(255,235,200,.025);
+    border-right: 1px solid rgba(0,0,0,.14);
+    border-bottom: 1px solid rgba(0,0,0,.20);
+}
+
+.cell:hover {
+    background:
+        linear-gradient(145deg, rgba(255,225,175,.08), transparent 32%),
+        linear-gradient(325deg, rgba(0,0,0,.12), transparent 55%),
+        linear-gradient(135deg, #66503b 0%, var(--cell-hover) 50%, #463426 100%) !important;
+}
+
+
+/* ===== ANA MENÜ ===== */
+/* Online arkadaş modu */
+.online-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(5,8,14,.82);backdrop-filter:blur(8px);z-index:2000;}
+.online-overlay.show{display:flex;}
+.online-card{width:min(470px,92vw);padding:28px;border-radius:24px;background:linear-gradient(145deg,#211c18,#15171c);border:1px solid rgba(255,255,255,.1);box-shadow:0 24px 80px rgba(0,0,0,.55);text-align:center;}
+.online-title{font-size:1.7rem;font-weight:900;color:#fff;margin-bottom:7px;}
+.online-subtitle{font-size:.88rem;color:rgba(255,255,255,.62);margin-bottom:22px;}
+.online-actions{display:flex;flex-direction:column;align-items:center;}
+.online-main-btn,.online-copy-btn,.online-close{border:0;border-radius:12px;padding:12px 18px;font-weight:800;cursor:pointer;color:#fff;background:linear-gradient(135deg,#b77b3d,#e0b16d);box-shadow:0 7px 18px rgba(0,0,0,.25);}
+.online-main-btn{width:100%;font-size:1rem;}
+.online-or{margin:13px 0;color:rgba(255,255,255,.42);font-size:.8rem;}
+.join-row{width:100%;display:flex;gap:8px;}
+.join-row input{flex:1;min-width:0;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:#0d1015;color:#fff;padding:12px;text-align:center;font-weight:800;letter-spacing:3px;text-transform:uppercase;outline:none;}
+.join-btn{width:110px;}
+.room-label{font-size:.72rem;color:rgba(255,255,255,.48);letter-spacing:2px;}
+.room-code{font-size:2.45rem;font-weight:1000;letter-spacing:8px;color:#f0d29a;margin:6px 0 10px;}
+.room-status{color:#fff;margin-bottom:14px;}
+.online-copy-btn{background:rgba(255,255,255,.09);box-shadow:none;}
+.online-close{margin-top:18px;background:rgba(255,255,255,.08);box-shadow:none;}
+.online-error{min-height:20px;color:#ff7777;font-size:.78rem;margin-top:12px;}
+@media(max-width:520px){.online-card{padding:22px}.room-code{font-size:2rem;letter-spacing:5px}.join-row{flex-direction:column}.join-btn{width:100%;}}
+
+#mainMenu{
+    position:fixed; inset:0; z-index:1000;
+    display:flex; align-items:center; justify-content:center;
+    padding:30px;
+    background:
+      radial-gradient(circle at 50% 35%, rgba(126,83,45,.22), transparent 38%),
+      radial-gradient(circle at 50% 80%, rgba(0,0,0,.45), transparent 55%),
+      #090807;
+}
+.menu-card{
+    width:min(560px,92vw); padding:48px 44px 42px;
+    text-align:center; border-radius:28px;
+    background:linear-gradient(145deg,rgba(58,39,27,.97),rgba(24,16,11,.98));
+    border:1px solid rgba(255,224,177,.13);
+    box-shadow:0 35px 90px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.07), inset 0 -18px 35px rgba(0,0,0,.22);
+    position:relative; overflow:hidden;
+}
+.menu-card::before{
+    content:""; position:absolute; inset:-30%; pointer-events:none;
+    background:radial-gradient(circle,rgba(235,190,119,.09),transparent 52%);
+}
+.menu-mark{
+    width:78px; height:78px; margin:0 auto 18px; border-radius:22px;
+    display:grid; place-items:center; font-size:40px;
+    background:linear-gradient(145deg,#8a5a2e,#4d2f18);
+    border:1px solid rgba(255,226,177,.22);
+    box-shadow:0 12px 30px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,235,200,.22), inset 0 -5px 10px rgba(0,0,0,.3);
+}
+.menu-title{
+    font-size:clamp(42px,8vw,68px); line-height:1; letter-spacing:5px;
+    font-weight:950; color:#f4dfbd; text-shadow:0 5px 18px rgba(0,0,0,.7),0 1px 0 #8b6036;
+}
+.menu-subtitle{margin:13px 0 34px;color:#bda98f;font-size:15px;letter-spacing:2px;text-transform:uppercase}
+.menu-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(239,205,160,.22),transparent);margin-bottom:26px}
+.menu-section-title{color:#e8d4b4;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px}
+.menu-button{
+    width:100%; border:0; border-radius:15px; padding:17px 20px; cursor:pointer;
+    color:#fff4e2; font-size:18px; font-weight:850; letter-spacing:.3px;
+    background:linear-gradient(180deg,#8f6033 0%,#69421f 52%,#513117 100%);
+    box-shadow:0 9px 0 #301b0c, 0 15px 28px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,238,205,.3);
+    border:1px solid rgba(255,222,175,.2); transition:transform .12s,box-shadow .12s,filter .2s;
+}
+.menu-button:hover{filter:brightness(1.12);transform:translateY(-2px);box-shadow:0 11px 0 #301b0c,0 18px 30px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,238,205,.3)}
+.menu-button:active{transform:translateY(5px);box-shadow:0 4px 0 #301b0c,0 8px 15px rgba(0,0,0,.35)}
+.menu-note{margin-top:24px;color:#796b5a;font-size:12px}
+.game-wrapper.menu-hidden{display:none}
+#gameScreen{display:flex;flex-direction:column;align-items:center;gap:24px}
+#gameScreen.hidden{display:none}
+.menu-open-btn{position:fixed;top:18px;left:18px;z-index:80;border:1px solid rgba(255,255,255,.1);background:rgba(20,14,10,.82);color:#ead7bb;border-radius:12px;padding:9px 13px;cursor:pointer;backdrop-filter:blur(8px)}
+
+
+/* QUORIX — gerçek tam ekran düzeni */
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+body {
+    padding: 0;
+    min-height: 100vh;
+}
+#gameScreen {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 38px 14px 12px;
+}
+#gameScreen.hidden { display: none; }
+.game-wrapper {
+    --fit-cell: min(calc((100vw - 44px) / 13.6), calc((100vh - 180px) / 13.6));
+    --cell-size: clamp(28px, var(--fit-cell), 68px);
+    --gap-size: calc(var(--cell-size) * .26);
+    width: 100%;
+    height: 100%;
+    max-width: 1100px;
+    max-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto 1fr auto;
+    align-items: center;
+    justify-items: center;
+    gap: 8px 14px;
+}
+#gameScreen .badge-red { grid-column: 1; grid-row: 1; justify-self: end; }
+#gameScreen .board-container { grid-column: 2; grid-row: 2; padding: clamp(8px, 1.1vh, 16px); }
+#gameScreen .badge-blue { grid-column: 3; grid-row: 1; justify-self: start; }
+#gameScreen .status-msg { grid-column: 2; grid-row: 3; min-height: 24px; font-size: clamp(.85rem, 1.7vh, 1.2rem); white-space: nowrap; }
+#gameScreen .controls { grid-column: 3; grid-row: 3; justify-self: start; gap: 7px; }
+#gameScreen .control-btn { padding: 7px 14px; font-size: .85rem; }
+#gameScreen .wall-help { font-size: .72rem; white-space: nowrap; }
+#board {
+    grid-template-columns: repeat(10, var(--cell-size) var(--gap-size)) var(--cell-size);
+    grid-template-rows: repeat(10, var(--cell-size) var(--gap-size)) var(--cell-size);
+}
+#gameScreen .wall-badge {
+    padding: 8px 16px;
+    gap: 8px;
+    font-size: clamp(.78rem, 1.7vh, 1rem);
+    white-space: nowrap;
+}
+#gameScreen .menu-open-btn {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    z-index: 50;
+}
+@media (max-width: 850px) {
+    #gameScreen { padding: 42px 8px 8px; }
+    .game-wrapper {
+        --fit-cell: min(calc((100vw - 28px) / 13.6), calc((100vh - 155px) / 13.6));
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto auto auto;
+        gap: 5px;
+    }
+    #gameScreen .badge-red { grid-column: 1; grid-row: 1; justify-self: center; }
+    #gameScreen .badge-blue { grid-column: 2; grid-row: 1; justify-self: center; }
+    #gameScreen .board-container { grid-column: 1 / 3; grid-row: 2; }
+    #gameScreen .status-msg { grid-column: 1 / 3; grid-row: 3; }
+    #gameScreen .controls { grid-column: 1 / 3; grid-row: 4; justify-self: center; }
+    #gameScreen .wall-help { display: none; }
+}
+@media (max-height: 700px) {
+    #gameScreen { padding-top: 34px; }
+    .game-wrapper { --fit-cell: min(calc((100vw - 28px) / 13.6), calc((100vh - 125px) / 13.6)); }
+    #gameScreen .badge-red, #gameScreen .badge-blue { padding: 5px 12px; }
+    #gameScreen .status-msg { display: none; }
+    #gameScreen .controls { grid-row: 3; }
+    #gameScreen .board-container { grid-row: 2; }
+}
+</style>
+
+<style id="goal-glow-direction">
+.cell.target-red{position:relative;overflow:visible;}
+.cell.target-red::before{content:"";position:absolute;inset:-3px;border-radius:10px;background:radial-gradient(circle,rgba(255,45,45,.34) 0%,rgba(255,45,45,.13) 48%,transparent 75%);box-shadow:0 0 14px rgba(255,45,45,.28),0 0 28px rgba(255,45,45,.12);pointer-events:none;z-index:0;animation:redGoalGlow 1.8s ease-in-out infinite alternate;}
+.cell.target-blue{position:relative;overflow:visible;}
+.cell.target-blue::before{content:"";position:absolute;inset:-3px;border-radius:10px;background:radial-gradient(circle,rgba(35,130,255,.34) 0%,rgba(35,130,255,.13) 48%,transparent 75%);box-shadow:0 0 14px rgba(35,130,255,.28),0 0 28px rgba(35,130,255,.12);pointer-events:none;z-index:0;animation:blueGoalGlow 1.8s ease-in-out infinite alternate;}
+@keyframes redGoalGlow{from{opacity:.62;transform:scale(.98)}to{opacity:1;transform:scale(1.02)}}
+@keyframes blueGoalGlow{from{opacity:.62;transform:scale(.98)}to{opacity:1;transform:scale(1.02)}}
+</style>
+
+<style id="difficulty-menu-style">
+.difficulty-overlay{position:fixed;inset:0;z-index:1100;display:none;align-items:center;justify-content:center;background:rgba(5,4,3,.72);backdrop-filter:blur(7px);}
+.difficulty-overlay.show{display:flex;}
+.difficulty-card{width:min(430px,calc(100vw - 36px));padding:30px;border:1px solid rgba(239,205,160,.2);border-radius:22px;background:linear-gradient(145deg,#3a281b,#21160f);box-shadow:0 25px 70px rgba(0,0,0,.7);text-align:center;}
+.difficulty-title{font-size:28px;font-weight:900;color:#f5dfbd;margin-bottom:8px;}
+.difficulty-subtitle{color:#a99781;font-size:14px;margin-bottom:24px;}
+.difficulty-buttons{display:flex;flex-direction:column;gap:12px;}
+.difficulty-button{border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:15px 18px;color:#fff;font-size:17px;font-weight:800;cursor:pointer;background:linear-gradient(145deg,#46301f,#2d1d12);box-shadow:0 5px 0 #160d08;transition:.15s;}
+.difficulty-button:hover{transform:translateY(-2px);filter:brightness(1.12);}
+.difficulty-button:active{transform:translateY(3px);box-shadow:0 2px 0 #160d08;}
+.difficulty-button.easy{border-color:rgba(46,204,113,.35);}
+.difficulty-button.medium{border-color:rgba(241,196,15,.35);}
+.difficulty-button.hard{border-color:rgba(231,76,60,.4);}
+.difficulty-cancel{margin-top:16px;background:transparent;border:0;color:#9d8b78;cursor:pointer;font-weight:700;padding:8px 16px;}
+</style>
+
+<style id="settings-style">
+.settings-overlay{position:fixed;inset:0;z-index:1200;display:none;align-items:center;justify-content:center;background:rgba(5,4,3,.72);backdrop-filter:blur(7px);}
+.settings-overlay.show{display:flex;}
+.settings-card{width:min(430px,calc(100vw - 36px));padding:30px;border:1px solid rgba(239,205,160,.2);border-radius:22px;background:linear-gradient(145deg,#3a281b,#21160f);box-shadow:0 25px 70px rgba(0,0,0,.7);text-align:center;}
+.settings-title{font-size:28px;font-weight:900;color:#f5dfbd;margin-bottom:22px;}
+.settings-row{display:flex;align-items:center;gap:14px;margin:18px 0;}
+.settings-row label{min-width:90px;text-align:left;color:#ead7bb;font-weight:800;}
+#volumeSlider{flex:1;accent-color:#d7aa68;cursor:pointer;}
+#volumeValue{width:48px;color:#fff;font-weight:800;text-align:right;}
+.settings-mute{width:100%;border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:13px 18px;color:#fff;font-size:16px;font-weight:800;cursor:pointer;background:linear-gradient(145deg,#46301f,#2d1d12);box-shadow:0 5px 0 #160d08;}
+.settings-close{margin-top:16px;background:transparent;border:0;color:#9d8b78;cursor:pointer;font-weight:700;padding:8px 16px;}
+.menu-settings-btn{margin-top:12px !important;background:linear-gradient(180deg,#5d4937,#403024) !important;}
+</style>
+</head>
+<body>
+
+    <div id="mainMenu">
+        <div class="menu-card">
+            <div class="menu-mark">🧱</div>
+            <div class="menu-title">QUORIX</div>
+            <div class="menu-subtitle">Strateji · Sabır · Yolunu Aç</div>
+            <div class="menu-divider"></div>
+            <div class="menu-section-title">Oyun Modu</div>
+            <button class="menu-button" id="localPlayBtn">🎮 2 Oyuncu — Aynı Bilgisayar</button>
+            <button class="menu-button" id="aiPlayBtn">🤖 Yapay Zekâya Karşı</button>
+            <button class="menu-button" id="onlinePlayBtn">🌐 Arkadaşlarla Oyna</button>
+            <button class="menu-button menu-settings-btn" id="settingsBtn">⚙️ Ayarlar</button>
+        </div>
+    </div>
+
+    <div class="difficulty-overlay" id="difficultyOverlay">
+        <div class="difficulty-card">
+            <div class="difficulty-title">🤖 Zorluk Seç</div>
+            <div class="difficulty-subtitle">Yapay zekânın seviyesini seç, sonra oyun başlasın.</div>
+            <div class="difficulty-buttons">
+                <button class="difficulty-button easy" data-difficulty="easy">🟢 Kolay</button>
+                <button class="difficulty-button medium" data-difficulty="medium">🟡 Orta</button>
+                <button class="difficulty-button hard" data-difficulty="hard">🔴 Zor</button>
+            </div>
+            <button class="difficulty-cancel" id="difficultyCancel">İptal</button>
+        </div>
+    </div>
+
+    <div class="online-overlay" id="onlineOverlay">
+    <div class="online-card">
+        <div class="online-title">🌐 Arkadaşlarla Oyna</div>
+        <div class="online-subtitle">İnternet üzerinden arkadaşınla aynı maçta oyna.</div>
+        <div class="online-actions" id="onlineActions">
+            <button class="online-main-btn" id="createRoomBtn">➕ Oda Oluştur</button>
+            <div class="online-or">veya</div>
+            <div class="join-row">
+                <input id="roomCodeInput" maxlength="6" placeholder="Oda kodu" autocomplete="off">
+                <button class="online-main-btn join-btn" id="joinRoomBtn">Katıl</button>
+            </div>
+        </div>
+        <div class="room-info" id="roomInfo" style="display:none">
+            <div class="room-label">ODA KODU</div>
+            <div class="room-code" id="roomCodeText">------</div>
+            <div class="room-status" id="onlineStatus">Arkadaşın bekleniyor...</div>
+            <button class="online-copy-btn" id="copyRoomBtn">📋 Kodu Kopyala</button>
+        </div>
+        <div class="online-error" id="onlineError"></div>
+        <button class="online-close" id="onlineCloseBtn">Kapat</button>
+    </div>
+</div>
+
+<div class="settings-overlay" id="settingsOverlay">
+        <div class="settings-card">
+            <div class="settings-title">⚙️ Ayarlar</div>
+            <div class="settings-row">
+                <label for="volumeSlider">🔊 Ses</label>
+                <input id="volumeSlider" type="range" min="0" max="100" value="100">
+                <span id="volumeValue">100%</span>
+            </div>
+            <button class="settings-close" id="settingsCloseBtn">Kapat</button>
+        </div>
+    </div>
+
+    <div id="gameScreen" class="hidden">
+        <button class="menu-open-btn" id="backToMenuBtn">☰ Menü</button>
+        <div class="game-wrapper">
+        <div id="badge-red" class="wall-badge badge-red active-turn">
+            <span>🔴 Kırmızı</span>
+            <span>🧱 <span id="count-red">10</span></span>
+        </div>
+
+        <div class="board-container">
+            <div id="board"></div>
+        </div>
+
+        <div id="badge-blue" class="wall-badge badge-blue">
+            <span>🔵 Mavi</span>
+            <span>🧱 <span id="count-blue">10</span></span>
+        </div>
+
+        <div class="status-msg" id="status">Kırmızı Oyuncunun Hamlesi</div>
+        <div class="controls">
+            <button class="control-btn" id="restartBtn">↻ Yeniden Başlat</button>
+            <span class="wall-help">Duvar: üzerine gel → önizle · tıkla → yerleştir</span>
+        </div>
+        </div>
+    </div>
+
+    <div class="winner-overlay" id="winnerOverlay">
+        <div class="winner-box">
+            <div class="winner-crown">🏆</div>
+            <div class="winner-kicker">OYUN BİTTİ</div>
+            <div class="winner-title" id="winnerTitle">KAZANAN</div>
+            <div class="winner-subtitle">Muhteşem hamle! Zafer senin.</div>
+            <div class="match-stats" id="matchStats">
+                <div class="stat-item"><span>⚡</span><b id="statMovesRed">0</b><small>Kırmızı Hamle</small></div>
+                <div class="stat-item"><span>⚡</span><b id="statMovesBlue">0</b><small>Mavi Hamle</small></div>
+                <div class="stat-item"><span>🧱</span><b id="statWallsRed">0</b><small>Kırmızı Duvar</small></div>
+                <div class="stat-item"><span>🧱</span><b id="statWallsBlue">0</b><small>Mavi Duvar</small></div>
+                <div class="stat-item stat-wide"><span>⏱️</span><b id="statTime">00:00</b><small>Maç Süresi</small></div>
+            </div>
+            <div class="winner-line"><span></span><b>QUORIX</b><span></span></div>
+        </div>
+    </div>
+
+    <script>
+        const SFX = (() => {
+    let ctx = null;
+    let muted = localStorage.getItem('quorix-muted') === '1';
+    let volume = Math.max(0, Math.min(1, Number(localStorage.getItem('quorix-volume') ?? '1')));
+
+    function getCtx() {
+        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+    }
+
+    function warmUp() {
+        if (!muted) getCtx();
+        document.removeEventListener('pointerdown', warmUp, true);
+        document.removeEventListener('keydown', warmUp, true);
+    }
+    document.addEventListener('pointerdown', warmUp, true);
+    document.addEventListener('keydown', warmUp, true);
+
+    function tone(freq, startTime, dur, type = 'sine', gainPeak = 0.11, freqEnd = null) {
+        const c = getCtx();
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, startTime);
+        if (freqEnd !== null) osc.frequency.exponentialRampToValueAtTime(freqEnd, startTime + dur);
+        gain.gain.setValueAtTime(0.0001, startTime);
+        gain.gain.exponentialRampToValueAtTime(gainPeak * volume, startTime + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(startTime);
+        osc.stop(startTime + dur + 0.03);
+    }
+
+    function run(fn) {
+        if (muted) return;
+        try { fn(getCtx().currentTime); } catch (e) {}
+    }
+
+    return {
+        move() {
+            run(t => tone(400, t, 0.10, 'sine', 0.08, 460));
+        },
+        wall() {
+            run(t => {
+                tone(150, t, 0.20, 'sine', 0.16, 72);
+                tone(72, t + 0.015, 0.18, 'triangle', 0.11, 48);
+                tone(340, t, 0.045, 'sine', 0.08);
+            });
+        },
+        hover() {
+            run(t => tone(500, t, 0.08, 'sine', 0.05, 640));
+        },
+        invalid() {
+            run(t => tone(300, t, 0.16, 'sine', 0.07, 230));
+        },
+        click() {
+            run(t => tone(620, t, 0.05, 'sine', 0.05));
+        },
+        win() {
+            run(t => {
+                [392.0, 493.88, 587.33, 784.0].forEach((f, i) => {
+                    tone(f, t + i * 0.15, 0.32, 'triangle', 0.11);
+                });
+            });
+        },
+        toggleMute() {
+            muted = !muted;
+            localStorage.setItem('quorix-muted', muted ? '1' : '0');
+            if (!muted) getCtx();
+            return muted;
+        },
+        isMuted() { return muted; },
+        setVolume(v) {
+            volume = Math.max(0, Math.min(1, Number(v) || 0));
+            localStorage.setItem('quorix-volume', String(volume));
+            return volume;
+        },
+        getVolume() { return volume; }
+    };
+})();
+
+        const settingsOverlay = document.getElementById('settingsOverlay');
+const volumeSlider = document.getElementById('volumeSlider');
+const volumeValue = document.getElementById('volumeValue');
+
+function refreshSettingsUI() {
+    const value = Math.round(SFX.getVolume() * 100);
+    volumeSlider.value = value;
+    volumeValue.textContent = value + '%';
+}
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+    SFX.click();
+    settingsOverlay.classList.add('show');
+    refreshSettingsUI();
+});
+
+document.getElementById('settingsCloseBtn').addEventListener('click', () => {
+    SFX.click();
+    settingsOverlay.classList.remove('show');
+});
+
+volumeSlider.addEventListener('input', () => {
+    SFX.setVolume(Number(volumeSlider.value) / 100);
+    refreshSettingsUI();
+});
+
+
+settingsOverlay.addEventListener('click', (e) => {
+    if (e.target === settingsOverlay) settingsOverlay.classList.remove('show');
+});
+
+const board = document.getElementById('board');
+        const mainMenu = document.getElementById('mainMenu');
+        const gameScreen = document.getElementById('gameScreen');
+        const onlineOverlay = document.getElementById('onlineOverlay');
+        const onlineStatus = document.getElementById('onlineStatus');
+        const onlineError = document.getElementById('onlineError');
+        let onlineMode = false;
+        let onlinePlayer = 0;
+        let onlineSocket = null;
+        let onlineRoomCode = '';
+        let onlineStarted = false;
+
+        function onlineSetError(message='') { onlineError.innerText = message; }
+        function onlineUrl() {
+            if (location.protocol === 'file:') return null;
+            return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+        }
+        function connectOnline() {
+            const url = onlineUrl();
+            if (!url) { onlineSetError('Online mod için oyunu sunucu üzerinden açmalısın.'); return null; }
+            if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) return onlineSocket;
+            onlineSocket = new WebSocket(url);
+            onlineSocket.onopen = () => onlineSetError('');
+            onlineSocket.onerror = () => onlineSetError('Sunucu bağlantısı kurulamadı.');
+            onlineSocket.onclose = () => {
+                if (onlineMode && !gameOver) {
+                    onlineStarted = false;
+                    onlineStatus.innerText = 'Bağlantı kapandı.';
+                    onlineSetError('Sunucu bağlantısı kesildi.');
+                }
+            };
+            onlineSocket.onmessage = e => {
+                let msg; try { msg = JSON.parse(e.data); } catch { return; }
+                if (msg.type === 'room-created' || msg.type === 'joined') {
+                    onlinePlayer = msg.player;
+                    onlineRoomCode = msg.code;
+                    document.getElementById('roomCodeText').innerText = msg.code;
+                    document.getElementById('onlineActions').style.display='none';
+                    document.getElementById('roomInfo').style.display='block';
+                    onlineStatus.innerText = msg.player === 1 ? 'Arkadaşın bekleniyor...' : 'Rakip aranıyor...';
+                    if (msg.type === 'joined') onlineMode = true;
+                }
+                if (msg.type === 'game-start') {
+                    onlineMode = true; onlineStarted = true;
+                    onlineStatus.innerText = 'Rakip bağlandı! Maç başlıyor...';
+                    onlineOverlay.classList.remove('show');
+                    aiMode = false;
+                    showGame();
+                    restartGame();
+                    updateOnlineTurnStatus();
+                }
+                if (msg.type === 'action' && onlineStarted) applyOnlineAction(msg.player, msg.action);
+                if (msg.type === 'opponent-left') {
+                    onlineStarted = false;
+                    onlineStatus.innerText = 'Rakip oyundan ayrıldı.';
+                    onlineSetError('Rakip bağlantısı kesildi.');
+                }
+                if (msg.type === 'error') onlineSetError(msg.message || 'Bir hata oluştu.');
+            };
+            return onlineSocket;
+        }
+        function sendOnlineAction(action) {
+            if (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN || !onlineStarted) return;
+            onlineSocket.send(JSON.stringify({type:'action', player:onlinePlayer, action}));
+        }
+        function updateOnlineTurnStatus() {
+            if (!onlineMode) return;
+            const mine = turn === onlinePlayer;
+            const status = document.getElementById('status');
+            status.innerText = mine ? 'Senin Hamlen' : 'Rakibin Hamlesi';
+            status.style.color = mine ? (onlinePlayer === 1 ? '#ff6b6b' : '#64b5f6') : '#d9b36c';
+            updateHighlights();
+        }
+        function applyOnlineAction(player, action) {
+            if (gameOver || player === onlinePlayer) return;
+            if (action.type === 'move') {
+                const oldPos = player === 1 ? {...p1Pos} : {...p2Pos};
+                if (player === 1) { p1Pos={r:action.r,c:action.c}; p1MoveCount++; }
+                else { p2Pos={r:action.r,c:action.c}; p2MoveCount++; }
+                SFX.move();
+                renderPawns({player, from:oldPos});
+                checkWin();
+                if (!gameOver) switchTurn();
+                return;
+            }
+            if (action.type === 'wall') {
+                const cells=getWallCells(action.r,action.c,action.dir);
+                if(!cells) return;
+                SFX.wall();
+                if(player===1) p1WallCount++; else p2WallCount++;
+                cells.forEach((key,index)=>{
+                    placedWalls.add(key);
+                    const [row,col]=key.split(','); const el=getElem(row,col);
+                    if(el){ el.classList.remove('wall-preview','invalid'); el.classList.add('wall-placed');
+                        if(action.dir==='h') el.classList.add(index===0?'wall-piece-h-start':index===1?'wall-piece-h-mid':'wall-piece-h-end');
+                        else el.classList.add(index===0?'wall-piece-v-start':index===1?'wall-piece-v-mid':'wall-piece-v-end'); }
+                });
+                if(player===1){p1Walls--;document.getElementById('count-red').innerText=p1Walls;}
+                else {p2Walls--;document.getElementById('count-blue').innerText=p2Walls;}
+                switchTurn();
+            }
+        }
+        function closeOnlineConnection() {
+            onlineStarted=false; onlineMode=false; onlinePlayer=0; onlineRoomCode='';
+            if(onlineSocket){ try{onlineSocket.close();}catch(e){} onlineSocket=null; }
+            document.getElementById('onlineActions').style.display='flex';
+            document.getElementById('roomInfo').style.display='none';
+            document.getElementById('roomCodeInput').value='';
+            onlineSetError('');
+        }
+        document.getElementById('onlinePlayBtn').addEventListener('click',()=>{
+            SFX.click(); mainMenu.style.display='none'; onlineOverlay.classList.add('show'); onlineSetError('');
+            document.getElementById('onlineActions').style.display='flex';
+            document.getElementById('roomInfo').style.display='none';
+            connectOnline();
+        });
+        document.getElementById('createRoomBtn').addEventListener('click',()=>{
+            SFX.click(); const ws=connectOnline();
+            if(ws) { const send=()=>ws.send(JSON.stringify({type:'create'})); if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true}); }
+        });
+        document.getElementById('joinRoomBtn').addEventListener('click',()=>{
+            SFX.click(); const code=document.getElementById('roomCodeInput').value.trim().toUpperCase();
+            if(code.length!==6){onlineSetError('6 haneli oda kodunu gir.');return;}
+            const ws=connectOnline();
+            if(ws){ const send=()=>ws.send(JSON.stringify({type:'join',code})); if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true}); }
+        });
+        document.getElementById('copyRoomBtn').addEventListener('click',async()=>{
+            try{await navigator.clipboard.writeText(onlineRoomCode); onlineSetError('Oda kodu kopyalandı.');}catch{onlineSetError('Kodu elle kopyalayabilirsin: '+onlineRoomCode);}
+        });
+        document.getElementById('onlineCloseBtn').addEventListener('click',()=>{SFX.click();onlineOverlay.classList.remove('show');mainMenu.style.display='flex';closeOnlineConnection();});
+
+
+
+        function showGame(){
+            mainMenu.style.display='none';
+            gameScreen.classList.remove('hidden');
+            const onlineOverlayEl=document.getElementById('onlineOverlay');
+            if(onlineOverlayEl) onlineOverlayEl.classList.remove('show');
+        }
+        function showMenu(){
+            closeOnlineConnection();
+            aiScheduleToken++;
+            if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
+            aiThinking = false;
+            const diffOverlay=document.getElementById('difficultyOverlay');
+            if(diffOverlay) diffOverlay.classList.remove('show');
+            gameScreen.classList.add('hidden');
+            mainMenu.style.display='flex';
+        }
+        document.querySelectorAll('.menu-button, .difficulty-button, .difficulty-cancel, .control-btn, .menu-open-btn').forEach(btn => {
+            btn.addEventListener('mouseenter', () => SFX.hover());
+        });
+
+        document.getElementById('localPlayBtn').addEventListener('click', () => {
+            SFX.click();
+            const onlineOverlayEl=document.getElementById('onlineOverlay');
+            if(onlineOverlayEl) onlineOverlayEl.classList.remove('show');
+            closeOnlineConnection();
+            aiMode = false;
+            showGame();
+            restartGame();
+        });
+        document.getElementById('aiPlayBtn').addEventListener('click', () => {
+            SFX.click();
+            const onlineOverlayEl=document.getElementById('onlineOverlay');
+            if(onlineOverlayEl) onlineOverlayEl.classList.remove('show');
+            closeOnlineConnection();
+            document.getElementById('difficultyOverlay').classList.add('show');
+        });
+        document.querySelectorAll('.difficulty-button').forEach(btn=>{
+            btn.addEventListener('click',()=>{
+                aiDifficulty=btn.dataset.difficulty;
+                SFX.click();
+                aiMode=true;
+                document.getElementById('difficultyOverlay').classList.remove('show');
+                showGame();
+                restartGame();
+            });
+        });
+        document.getElementById('difficultyCancel').addEventListener('click',()=>{
+            SFX.click();
+            document.getElementById('difficultyOverlay').classList.remove('show');
+        });
+        document.getElementById('backToMenuBtn').addEventListener('click', () => { SFX.click(); showMenu(); });
+        
+        let turn = 1;
+        let p1Pos = { r: 20, c: 10 };
+        let p2Pos = { r: 0, c: 10 };
+        let p1Walls = 10;
+        let p2Walls = 10;
+        let placedWalls = new Set();
+        let gameOver = false;
+        let p1MoveCount = 0;
+        let p2MoveCount = 0;
+        let p1WallCount = 0;
+        let p2WallCount = 0;
+        let gameStartTime = 0;
+        let gameElapsedMs = 0;
+        let aiMode = false;
+        let aiDifficulty = 'hard';
+        let aiThinking = false;
+        let aiWorker = null;
+        let aiScheduleToken = 0;
+
+        function initGame() {
+            gameStartTime = performance.now();
+            gameElapsedMs = 0;
+            buildBoard();
+            updateHighlights();
+        }
+
+        function buildBoard() {
+            board.innerHTML = '';
+            for (let r = 0; r < 21; r++) {
+                for (let c = 0; c < 21; c++) {
+                    const el = document.createElement('div');
+                    el.dataset.row = r;
+                    el.dataset.col = c;
+
+                    if (r % 2 === 0 && c % 2 === 0) {
+                        el.classList.add('cell');
+                        if (r === 0) el.classList.add('target-red');
+                        if (r === 20) el.classList.add('target-blue');
+
+                        // Karakterin çıkış/hedef alanına gelince duvar önizlemesi görünmesin.
+                        // Böylece hedef hücresinin üzerinde veya hemen üstünde takılı kalan
+                        // hayalet duvar temizlenir.
+                        if (r === 0 || r === 20) {
+                            el.addEventListener('mouseenter', () => {
+                                clearWallPreview();
+                                hoverWallTarget = null;
+                            });
+                        }
+
+                        el.addEventListener('click', () => handleCellClick(r, c));
+                    } else if (r % 2 === 1 && c % 2 === 0) {
+                        el.classList.add('wall-space-h');
+                        setupWallEvents(el, r, c, 'h');
+                    } else if (r % 2 === 0 && c % 2 === 1) {
+                        el.classList.add('wall-space-v');
+                        setupWallEvents(el, r, c, 'v');
+                    } else {
+                        el.classList.add('wall-dot');
+                    }
+                    board.appendChild(el);
+                }
+            }
+            renderPawns();
+        }
+
+        function renderPawns(animation = null) {
+            document.querySelectorAll('.pawn').forEach(p => p.remove());
+
+            function createPawn(pos, color, fromPos) {
+                const cell = getElem(pos.r, pos.c);
+                if (!cell) return;
+
+                const pawn = document.createElement('div');
+                pawn.className = `pawn pawn-${color}`;
+
+                if (animation && fromPos) {
+                    const fromCell = getElem(fromPos.r, fromPos.c);
+                    if (fromCell) {
+                        const fromRect = fromCell.getBoundingClientRect();
+                        const toRect = cell.getBoundingClientRect();
+                        pawn.style.setProperty('--pawn-start-x', `${fromRect.left - toRect.left}px`);
+                        pawn.style.setProperty('--pawn-start-y', `${fromRect.top - toRect.top}px`);
+                        pawn.classList.add(animation.ai ? 'pawn-ai-moving' : 'pawn-moving');
+                    }
+                }
+
+                cell.appendChild(pawn);
+            }
+
+            createPawn(p1Pos, 'red', animation && animation.player === 1 ? animation.from : null);
+            createPawn(p2Pos, 'blue', animation && animation.player === 2 ? animation.from : null);
+        }
+
+        function isBlockedBetween(r1, c1, r2, c2) {
+            const wr = (r1 + r2) / 2, wc = (c1 + c2) / 2;
+            return placedWalls.has(`${wr},${wc}`);
+        }
+
+        function getValidMoves(pos, oppPos) {
+            const moves = [];
+            const dirs = [[-2,0],[2,0],[0,-2],[0,2]];
+
+            for (const [dr, dc] of dirs) {
+                const nr = pos.r + dr, nc = pos.c + dc;
+                if (nr < 0 || nr > 20 || nc < 0 || nc > 20) continue;
+                if (isBlockedBetween(pos.r,pos.c,nr,nc)) continue;
+
+                if (nr !== oppPos.r || nc !== oppPos.c) {
+                    moves.push({r:nr,c:nc});
+                    continue;
+                }
+
+                const jr = nr + dr, jc = nc + dc;
+                if (jr >= 0 && jr <= 20 && jc >= 0 && jc <= 20 &&
+                    !isBlockedBetween(nr,nc,jr,jc)) {
+                    moves.push({r:jr,c:jc});
+                    continue;
+                }
+
+                const sides = dc === 0 ? [[0,-2],[0,2]] : [[-2,0],[2,0]];
+                for (const [sr,sc] of sides) {
+                    const ar = nr + sr, ac = nc + sc;
+                    if (ar < 0 || ar > 20 || ac < 0 || ac > 20) continue;
+                    if (!isBlockedBetween(nr,nc,ar,ac)) moves.push({r:ar,c:ac});
+                }
+            }
+            return moves;
+        }
+
+        function updateHighlights() {
+            document.querySelectorAll('.valid-move').forEach(el => el.classList.remove('valid-move'));
+            if (gameOver) return;
+            // Yapay zekânın hamle seçeneklerini gösterme; yeşil ışık sadece oyuncuda olsun.
+            if (aiMode && turn === 2) return;
+                if (onlineMode && turn !== onlinePlayer) return;
+
+            const curPos = turn === 1 ? p1Pos : p2Pos;
+            const oppPos = turn === 1 ? p2Pos : p1Pos;
+            const validMoves = getValidMoves(curPos, oppPos);
+
+            validMoves.forEach(m => {
+                const el = getElem(m.r, m.c);
+                if (el) el.classList.add('valid-move');
+            });
+        }
+
+        function handleCellClick(r, c) {
+            if (gameOver || (aiMode && turn === 2) || aiThinking || (onlineMode && turn !== onlinePlayer)) return;
+            const curPos = turn === 1 ? p1Pos : p2Pos;
+            const oppPos = turn === 1 ? p2Pos : p1Pos;
+            const validMoves = getValidMoves(curPos, oppPos);
+
+            const isMoveValid = validMoves.some(m => m.r === r && m.c === c);
+            if (isMoveValid) {
+                SFX.move();
+                if (turn === 1) p1MoveCount++; else p2MoveCount++;
+                const movingPlayer = turn;
+                const oldPos = { ...curPos };
+
+                if (turn === 1) p1Pos = { r, c };
+                else p2Pos = { r, c };
+                if (onlineMode) sendOnlineAction({type:'move', r, c});
+
+                renderPawns({ player: movingPlayer, from: oldPos });
+                checkWin();
+                if (!gameOver) switchTurn();
+            }
+        }
+
+        function getWallSide(el, event, dir) {
+            // Aynı duvar yuvasının iki yönünü de kullanabilmek için
+            // imlecin yuvanın hangi yarısında olduğuna bakıyoruz.
+            // Dikey yuvada üst yarı = yukarı, alt yarı = aşağı.
+            // Yatay yuvada sol yarı = sola, sağ yarı = sağa.
+            const rect = el.getBoundingClientRect();
+            if (dir === 'v') {
+                return event.clientY < rect.top + rect.height / 2 ? 'up' : 'down';
+            }
+            return event.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+        }
+
+        function setupWallEvents(el, r, c, dir) {
+            el.addEventListener('mouseenter', (event) => {
+                if (aiMode && turn === 2) return;
+                if (onlineMode && turn !== onlinePlayer) return;
+                if (el.classList.contains('wall-placed')) {
+                    clearWallPreview();
+                    hoverWallTarget = null;
+                    return;
+                }
+                const side = getWallSide(el, event, dir);
+                previewWall(r, c, dir, true, side);
+            });
+
+            el.addEventListener('mousemove', (event) => {
+                if (aiMode && turn === 2) return;
+                if (el.classList.contains('wall-placed')) return;
+                const side = getWallSide(el, event, dir);
+                previewWall(r, c, dir, true, side);
+            });
+
+            el.addEventListener('mouseleave', () => {
+                previewWall(r, c, dir, false);
+            });
+
+            el.addEventListener('click', (event) => {
+                if (aiMode && turn === 2) return;
+                if (el.classList.contains('wall-placed')) return;
+                const side = getWallSide(el, event, dir);
+                placeWall(r, c, dir, side);
+            });
+        }
+
+        function getWallCells(r, c, dir) {
+            if (dir === 'h') {
+                if (c > 18) return null;
+                return [`${r},${c}`, `${r},${c + 1}`, `${r},${c + 2}`];
+            } else {
+                if (r > 18) return null;
+                return [`${r},${c}`, `${r + 1},${c}`, `${r + 2},${c}`];
+            }
+        }
+
+        function pathExists(player, extraCells = []) {
+            const startPos = player === 1 ? p1Pos : p2Pos;
+            const targetRow = player === 1 ? 0 : 20;
+            const extra = new Set(extraCells);
+            const queue = [[startPos.r,startPos.c]];
+            const seen = new Set([`${startPos.r},${startPos.c}`]);
+
+            while (queue.length) {
+                const [r,c] = queue.shift();
+                if (r === targetRow) return true;
+
+                for (const [dr,dc] of [[-2,0],[2,0],[0,-2],[0,2]]) {
+                    const nr=r+dr,nc=c+dc;
+                    if(nr<0||nr>20||nc<0||nc>20) continue;
+                    const wallKey=`${(r+nr)/2},${(c+nc)/2}`;
+                    if(placedWalls.has(wallKey)||extra.has(wallKey)) continue;
+                    const k=`${nr},${nc}`;
+                    if(!seen.has(k)){seen.add(k);queue.push([nr,nc]);}
+                }
+            }
+            return false;
+        }
+
+        function canPlaceWall(cells, r, c, dir) {
+            if (!cells) return false;
+            const remainingWalls = turn === 1 ? p1Walls : p2Walls;
+            if (remainingWalls <= 0) return false;
+            if (cells.some(key => placedWalls.has(key))) return false;
+            if (!pathExists(1, cells) || !pathExists(2, cells)) return false;
+            return true;
+        }
+
+        function wallCandidate(r, c, dir, side) {
+            // Aynı duvar yuvasından iki yöne de duvar kurulabilir.
+            // Hangi tarafın seçileceğini mouse'un bulunduğu yarı belirler.
+            let startR = r;
+            let startC = c;
+
+            if (dir === 'v') {
+                if (side === 'up') startR = r - 2;
+                else startR = r;
+            } else {
+                if (side === 'left') startC = c - 2;
+                else startC = c;
+            }
+
+            const cells = getWallCells(startR, startC, dir);
+            if (!cells) return null;
+            return { r: startR, c: startC, dir, cells, side };
+        }
+
+        let hoverWallTarget = null;
+
+        function clearWallPreview() {
+            document.querySelectorAll('.wall-preview,.invalid').forEach(el => {
+                el.classList.remove('wall-preview','invalid');
+            });
+        }
+
+        function previewWall(r, c, dir, show, side) {
+            if (gameOver) return;
+            clearWallPreview();
+            hoverWallTarget = null;
+            if (!show) return;
+
+            // Sadece imlecin bulunduğu yuva ve seçtiği yön kullanılır.
+            // Başka bir yuvaya otomatik kaydırma kesinlikle yok.
+            const target = wallCandidate(r, c, dir, side);
+            if (!target) return;
+
+            hoverWallTarget = target;
+
+            const legal = canPlaceWall(target.cells, target.r, target.c, target.dir);
+
+            target.cells.forEach(key => {
+                const [row, col] = key.split(',');
+                const el = getElem(row, col);
+                if (!el || el.classList.contains('wall-placed')) return;
+
+                // Yasal konumda normal hayalet duvar,
+                // yasal değilse aynı yerde kırmızı/soluk uyarı.
+                el.classList.add(legal ? 'wall-preview' : 'invalid');
+            });
+        }
+
+        function placeWall(r, c, dir, side) {
+            if (gameOver) return;
+
+            // Tıklama yalnızca imlecin bulunduğu gerçek yuvaya ve seçtiği yöne duvar koyar.
+            // Geçersiz yuvadaysa başka bir yere otomatik yerleştirme yapılmaz.
+            const target = hoverWallTarget || wallCandidate(r, c, dir, side);
+            if (!target || !canPlaceWall(target.cells, target.r, target.c, target.dir)) {
+                SFX.invalid();
+                clearWallPreview();
+                hoverWallTarget = null;
+                return;
+            }
+
+            SFX.wall();
+            if (turn === 1) p1WallCount++; else p2WallCount++;
+            const {cells, r: wr, c: wc, dir: wdir} = target;
+
+            cells.forEach((key, index) => {
+                placedWalls.add(key);
+                const [row, col] = key.split(',');
+                const el = getElem(row, col);
+                if (el) {
+                    el.classList.remove('wall-preview','invalid');
+                    el.classList.add('wall-placed');
+                    if (wdir === 'h') {
+                        el.classList.add(index === 0 ? 'wall-piece-h-start' :
+                                         index === 1 ? 'wall-piece-h-mid' : 'wall-piece-h-end');
+                    } else {
+                        el.classList.add(index === 0 ? 'wall-piece-v-start' :
+                                         index === 1 ? 'wall-piece-v-mid' : 'wall-piece-v-end');
+                    }
+                }
+            });
+
+            if (turn === 1) {
+                p1Walls--;
+                document.getElementById('count-red').innerText = p1Walls;
+            } else {
+                p2Walls--;
+                document.getElementById('count-blue').innerText = p2Walls;
+            }
+
+            clearWallPreview();
+            hoverWallTarget = null;
+            if (onlineMode) sendOnlineAction({type:'wall', r:wr, c:wc, dir:wdir});
+            switchTurn();
+        }
+
+        function switchTurn() {
+            turn = turn === 1 ? 2 : 1;
+            const badgeRed = document.getElementById('badge-red');
+            const badgeBlue = document.getElementById('badge-blue');
+            const status = document.getElementById('status');
+
+            if (turn === 1) {
+                badgeRed.classList.add('active-turn');
+                badgeBlue.classList.remove('active-turn');
+                status.innerText = "Kırmızı Oyuncunun Hamlesi";
+                status.style.color = "#ff6b6b";
+            } else {
+                badgeBlue.classList.add('active-turn');
+                badgeRed.classList.remove('active-turn');
+                status.innerText = "Mavi Oyuncunun Hamlesi";
+                status.style.color = "#64b5f6";
+            }
+            updateHighlights();
+            if (onlineMode) updateOnlineTurnStatus();
+            if (aiMode && turn === 2 && !gameOver) {
+                scheduleAI();
+            }
+        }
+
+        function formatMatchTime(ms) {
+            const total = Math.max(0, Math.floor(ms / 1000));
+            const minutes = Math.floor(total / 60);
+            const seconds = total % 60;
+            return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+        }
+
+        function showMatchStats() {
+            gameElapsedMs = Math.max(0, performance.now() - gameStartTime);
+            document.getElementById('statMovesRed').innerText = p1MoveCount;
+            document.getElementById('statMovesBlue').innerText = p2MoveCount;
+            document.getElementById('statWallsRed').innerText = p1WallCount;
+            document.getElementById('statWallsBlue').innerText = p2WallCount;
+            document.getElementById('statTime').innerText = formatMatchTime(gameElapsedMs);
+        }
+
+        function checkWin() {
+            const status = document.getElementById('status');
+            const overlay = document.getElementById('winnerOverlay');
+            const title = document.getElementById('winnerTitle');
+            if (p1Pos.r === 0) {
+                status.innerText = '';
+                gameOver = true;
+                SFX.win();
+                showMatchStats();
+                overlay.className = 'winner-overlay show red';
+                title.innerText = '🔴 KIRMIZI OYUNCU KAZANDI!';
+                setTimeout(() => {
+                    overlay.className = 'winner-overlay';
+                    showMenu();
+                }, 6000);
+            } else if (p2Pos.r === 20) {
+                status.innerText = '';
+                gameOver = true;
+                SFX.win();
+                showMatchStats();
+                overlay.className = 'winner-overlay show blue';
+                title.innerText = '🔵 MAVİ OYUNCU KAZANDI!';
+                setTimeout(() => {
+                    overlay.className = 'winner-overlay';
+                    showMenu();
+                }, 6000);
+            }
+        }
+
+        function getElem(r, c) {
+            return document.querySelector(`[data-row='${r}'][data-col='${c}']`);
+        }
+
+        function restartGame() {
+            aiScheduleToken++;
+            if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
+            aiThinking = false;
+            turn = 1;
+            p1Pos = { r: 20, c: 10 };
+            p2Pos = { r: 0, c: 10 };
+            p1Walls = 10;
+            p2Walls = 10;
+            placedWalls = new Set();
+            gameOver = false;
+            p1MoveCount = 0;
+            p2MoveCount = 0;
+            p1WallCount = 0;
+            p2WallCount = 0;
+            gameStartTime = performance.now();
+            gameElapsedMs = 0;
+            const winnerOverlay = document.getElementById('winnerOverlay');
+            if (winnerOverlay) winnerOverlay.className = 'winner-overlay';
+            document.getElementById('count-red').innerText = '10';
+            document.getElementById('count-blue').innerText = '10';
+            document.getElementById('badge-red').classList.add('active-turn');
+            document.getElementById('badge-blue').classList.remove('active-turn');
+            const status = document.getElementById('status');
+            status.innerText = 'Kırmızı Oyuncunun Hamlesi';
+            status.style.color = '#ff6b6b';
+            buildBoard();
+            updateHighlights();
+        }
+
+        document.getElementById('restartBtn').addEventListener('click', () => { SFX.click(); restartGame(); });
+        document.addEventListener('keydown', e => {
+            if (e.key.toLowerCase() === 'r') restartGame();
+        });
+
+
+        // =========================
+        // GÜÇLÜ YAPAY ZEKÂ MOTORU
+        // =========================
+        const AI_WORKER_SOURCE = `
+        const DIRS = [[-2,0],[2,0],[0,-2],[0,2]];
+        function key(r,c){return r+','+c;}
+        function blocked(walls,r1,c1,r2,c2){return walls.has(((r1+r2)/2)+','+((c1+c2)/2));}
+        function moves(pos,opp,walls){
+            const out=[];
+            for(const [dr,dc] of DIRS){
+                const nr=pos.r+dr,nc=pos.c+dc;
+                if(nr<0||nr>20||nc<0||nc>20||blocked(walls,pos.r,pos.c,nr,nc)) continue;
+                if(nr!==opp.r||nc!==opp.c){out.push({r:nr,c:nc});continue;}
+                const jr=nr+dr,jc=nc+dc;
+                if(jr>=0&&jr<=20&&jc>=0&&jc<=20&&!blocked(walls,nr,nc,jr,jc)){out.push({r:jr,c:jc});continue;}
+                const sides=dc===0?[[0,-2],[0,2]]:[[-2,0],[2,0]];
+                for(const [sr,sc] of sides){const ar=nr+sr,ac=nc+sc;if(ar<0||ar>20||ac<0||ac>20)continue;if(!blocked(walls,nr,nc,ar,ac))out.push({r:ar,c:ac});}
+            }
+            return out;
+        }
+        function dist(pos,targetRow,walls){
+            const q=[[pos.r,pos.c,0]], seen=new Set([key(pos.r,pos.c)]);
+            for(let i=0;i<q.length;i++){
+                const [r,c,d]=q[i]; if(r===targetRow)return d;
+                for(const [dr,dc] of DIRS){const nr=r+dr,nc=c+dc;if(nr<0||nr>20||nc<0||nc>20||blocked(walls,r,c,nr,nc))continue;const k=key(nr,nc);if(!seen.has(k)){seen.add(k);q.push([nr,nc,d+1]);}}
+            }
+            return 99;
+        }
+        function pathExists(pos,targetRow,walls){return dist(pos,targetRow,walls)<99;}
+        function wallCells(r,c,dir){
+            if(dir==='h'){if(c>18)return null;return [key(r,c),key(r,c+1),key(r,c+2)];}
+            if(r>18)return null;return [key(r,c),key(r+1,c),key(r+2,c)];
+        }
+        function legalWalls(s, player){
+            const out=[]; if((player===1?s.w1:s.w2)<=0)return out;
+            for(let r=1;r<=19;r+=2)for(let c=0;c<=18;c+=2){
+                const cells=wallCells(r,c,'h'); if(!cells||cells.some(x=>s.walls.has(x)))continue;
+                const nw=new Set(s.walls);cells.forEach(x=>nw.add(x));
+                if(pathExists(s.p1,0,nw)&&pathExists(s.p2,20,nw))out.push({type:'wall',r,c,dir:'h'});
+            }
+            for(let r=0;r<=18;r+=2)for(let c=1;c<=19;c+=2){
+                const cells=wallCells(r,c,'v'); if(!cells||cells.some(x=>s.walls.has(x)))continue;
+                const nw=new Set(s.walls);cells.forEach(x=>nw.add(x));
+                if(pathExists(s.p1,0,nw)&&pathExists(s.p2,20,nw))out.push({type:'wall',r,c,dir:'v'});
+            }
+            return out;
+        }
+        function apply(s,m,p){
+            const n={p1:{...s.p1},p2:{...s.p2},w1:s.w1,w2:s.w2,walls:new Set(s.walls)};
+            if(m.type==='move'){if(p===1)n.p1={r:m.r,c:m.c};else n.p2={r:m.r,c:m.c};}
+            else {for(const x of wallCells(m.r,m.c,m.dir))n.walls.add(x);if(p===1)n.w1--;else n.w2--;}
+            return n;
+        }
+        function won(s,p){return p===1?s.p1.r===0:s.p2.r===20;}
+        function shortestPathCells(pos,targetRow,walls){
+            const q=[[pos.r,pos.c]], prev=new Map([[key(pos.r,pos.c),null]]);
+            let goal=null;
+            for(let i=0;i<q.length;i++){const [r,c]=q[i];if(r===targetRow){goal=[r,c];break;}for(const [dr,dc] of DIRS){const nr=r+dr,nc=c+dc;if(nr<0||nr>20||nc<0||nc>20||blocked(walls,r,c,nr,nc))continue;const k=key(nr,nc);if(!prev.has(k)){prev.set(k,key(r,c));q.push([nr,nc]);}}}
+            if(!goal)return []; const arr=[];let k=key(goal[0],goal[1]);while(k){const [r,c]=k.split(',').map(Number);arr.push({r,c});k=prev.get(k);}return arr.reverse();
+        }
+        function candidateWalls(s,p){
+            if((p===1?s.w1:s.w2)<=0)return [];
+            const me=p===1?s.p1:s.p2, opp=p===1?s.p2:s.p1, meGoal=p===1?0:20, oppGoal=p===1?20:0;
+            const path=shortestPathCells(opp,oppGoal,s.walls); const myPath=shortestPathCells(me,meGoal,s.walls);
+            const anchors=new Set();
+            for(const cell of path)for(const [dr,dc,dir] of [[1,0,'h'],[-1,0,'h'],[0,1,'v'],[0,-1,'v']]){
+                const r=dir==='h'?cell.r+dr:cell.r, c=dir==='v'?cell.c+dc:cell.c;
+                if(dir==='h'&&r%2===1&&c%2===0&&r>=1&&r<=19&&c<=18)anchors.add(r+','+c+','+dir);
+                if(dir==='v'&&r%2===0&&c%2===1&&r<=18&&c>=1&&c<=19)anchors.add(r+','+c+','+dir);
+            }
+            for(const cell of myPath)for(const [dr,dc,dir] of [[1,0,'h'],[-1,0,'h'],[0,1,'v'],[0,-1,'v']]){
+                const r=dir==='h'?cell.r+dr:cell.r, c=dir==='v'?cell.c+dc:cell.c;
+                if(dir==='h'&&r%2===1&&c%2===0&&r>=1&&r<=19&&c<=18)anchors.add(r+','+c+','+dir);
+                if(dir==='v'&&r%2===0&&c%2===1&&r<=18&&c>=1&&c<=19)anchors.add(r+','+c+','+dir);
+            }
+            const all=[]; for(const a of anchors){const [r,c,dir]=a.split(',');all.push({type:'wall',r:+r,c:+c,dir});}
+            return all;
+        }
+        function evaluate(s,root){
+            if(won(s,root))return 100000;
+            if(won(s,root===1?2:1))return -100000;
+            const md=dist(root===1?s.p1:s.p2,root===1?0:20,s.walls);
+            const od=dist(root===1?s.p2:s.p1,root===1?20:0,s.walls);
+            const mw=root===1?s.w1:s.w2, ow=root===1?s.w2:s.w1;
+            const myMoves=moves(root===1?s.p1:s.p2,root===1?s.p2:s.p1,s.walls).length;
+            const opMoves=moves(root===1?s.p2:s.p1,root===1?s.p1:s.p2,s.walls).length;
+            return (od-md)*140+(mw-ow)*9+(myMoves-opMoves)*3;
+        }
+        function moveScore(s,m,p){
+            const n=apply(s,m,p); const me=p===1?n.p1:n.p2, opp=p===1?n.p2:n.p1;
+            const myGoal=p===1?0:20, opGoal=p===1?20:0;
+            const beforeMe=dist(p===1?s.p1:s.p2,myGoal,s.walls), beforeOp=dist(opp,opGoal,s.walls);
+            const afterMe=dist(me,myGoal,n.walls), afterOp=dist(opp,opGoal,n.walls);
+            let sc=(beforeMe-afterMe)*180+(afterOp-beforeOp)*160;
+            if(m.type==='wall')sc+=18;
+            return sc;
+        }
+        function orderedMoves(s,p){
+            const arr=[]; const me=p===1?s.p1:s.p2,opp=p===1?s.p2:s.p1;
+            for(const m of moves(me,opp,s.walls))arr.push({m:{type:'move',r:m.r,c:m.c},score:moveScore(s,{type:'move',r:m.r,c:m.c},p)});
+            for(const m of candidateWalls(s,p)){const cells=wallCells(m.r,m.c,m.dir);if(!cells||cells.some(x=>s.walls.has(x)))continue;const n={...s,walls:new Set(s.walls)};cells.forEach(x=>n.walls.add(x));if(pathExists(n.p1,0,n.walls)&&pathExists(n.p2,20,n.walls))arr.push({m,score:moveScore(s,m,p)});}
+            arr.sort((a,b)=>b.score-a.score); return arr.slice(0,28).map(x=>x.m);
+        }
+        let deadline=0, nodes=0, rootPlayer=2, table=new Map();
+        function minimax(s,p,depth,alpha,beta){
+            nodes++; if(performance.now()>deadline)throw 'TIME';
+            if(depth===0||won(s,1)||won(s,2))return {score:evaluate(s,rootPlayer)};
+            const maximizing=p===rootPlayer; let best=maximizing?-Infinity:Infinity,bm=null;
+            const moveset=orderedMoves(s,p);
+            for(const m of moveset){const n=apply(s,m,p);const val=minimax(n,p===1?2:1,depth-1,alpha,beta).score;if(maximizing){if(val>best){best=val;bm=m;}alpha=Math.max(alpha,val);}else{if(val<best){best=val;bm=m;}beta=Math.min(beta,val);}if(beta<=alpha)break;}
+            return {score:best,move:bm};
+        }
+        function search(s,timeMs,maxDepth){
+            rootPlayer=2; deadline=performance.now()+timeMs;nodes=0;let best=null,bestScore=-Infinity;
+            for(let depth=1;depth<=maxDepth;depth++){try{const r=minimax(s,2,depth,-Infinity,Infinity);if(r.move){best=r.move;bestScore=r.score;} }catch(e){break;}}
+            return {move:best,score:bestScore,nodes};
+        }
+        self.onmessage=e=>{try{const x=e.data;const s={p1:x.p1,p2:x.p2,w1:x.w1,w2:x.w2,walls:new Set(x.walls)};const result=search(s,x.timeMs||850,x.maxDepth||5);self.postMessage(result);}catch(err){self.postMessage({error:String(err)});}};
+        `;
+
+        function makeAIWorker(){
+            if(aiWorker) aiWorker.terminate();
+            const blob=new Blob([AI_WORKER_SOURCE],{type:'application/javascript'});
+            aiWorker=new Worker(URL.createObjectURL(blob));
+            const workerToken = aiScheduleToken;
+            aiWorker.onmessage=e=>{
+                aiThinking=false;
+                if(workerToken !== aiScheduleToken || gameOver || !aiMode || turn!==2) return;
+                const move=e.data.move;
+                if(!move){ document.getElementById('status').innerText='🤖 Yapay zekâ hamle bulamadı'; return; }
+                applyAIMove(move);
+            };
+        }
+
+        function scheduleAI(){
+            if(!aiMode||gameOver||turn!==2||aiThinking)return;
+
+            // Oyuncu duvarı seçerken/önizlerken AI kesinlikle başlamaz.
+            // Önce oyuncunun hamlesinin tamamlanmasını bekler, ardından kısa bir geçiş süresi verir.
+            const token = ++aiScheduleToken;
+            aiThinking=true;
+            clearWallPreview();
+            const status=document.getElementById('status');
+            status.innerText='🤖 Yapay zekâ hazırlanıyor...';
+            status.style.color='#d9b36c';
+
+            setTimeout(() => {
+                if(token !== aiScheduleToken || gameOver || !aiMode || turn !== 2) {
+                    aiThinking=false;
+                    return;
+                }
+                status.innerText='🤖 Yapay zekâ düşünüyor...';
+                makeAIWorker();
+                const difficultyConfig={
+                    easy:{timeMs:220,maxDepth:2},
+                    medium:{timeMs:500,maxDepth:3},
+                    hard:{timeMs:900,maxDepth:5}
+                };
+                const cfg=difficultyConfig[aiDifficulty]||difficultyConfig.hard;
+                const state={p1:{...p1Pos},p2:{...p2Pos},w1:p1Walls,w2:p2Walls,walls:[...placedWalls],timeMs:cfg.timeMs,maxDepth:cfg.maxDepth};
+                aiWorker.postMessage(state);
+            }, 450);
+        }
+
+        function applyAIMove(move){
+            if(move.type==='move'){
+                SFX.move();
+                p2MoveCount++;
+                const oldPos = { ...p2Pos };
+                p2Pos={r:move.r,c:move.c};
+                renderPawns({ player: 2, from: oldPos, ai: true });
+                checkWin();
+                if(!gameOver) switchTurn();
+                return;
+            }
+            const cells=getWallCells(move.r,move.c,move.dir);
+            if(!cells)return;
+            SFX.wall();
+            p2WallCount++;
+            cells.forEach((key,index)=>{
+                placedWalls.add(key);
+                const [row,col]=key.split(','); const el=getElem(row,col);
+                if(el){el.classList.remove('wall-preview','invalid');el.classList.add('wall-placed');
+                    if(move.dir==='h')el.classList.add(index===0?'wall-piece-h-start':index===1?'wall-piece-h-mid':'wall-piece-h-end');
+                    else el.classList.add(index===0?'wall-piece-v-start':index===1?'wall-piece-v-mid':'wall-piece-v-end');}
+            });
+            p2Walls--; document.getElementById('count-blue').innerText=p2Walls;
+            switchTurn();
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
