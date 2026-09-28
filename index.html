@@ -818,6 +818,23 @@ body {
 .difficulty-cancel{margin-top:16px;background:transparent;border:0;color:#9d8b78;cursor:pointer;font-weight:700;padding:8px 16px;}
 </style>
 
+<style id="player-name-style">
+.player-name-menu-btn{margin-top:12px !important;background:linear-gradient(180deg,#6f563d,#4b3828) !important;}
+.name-overlay{position:fixed;inset:0;z-index:1500;display:none;align-items:center;justify-content:center;background:rgba(5,4,3,.74);backdrop-filter:blur(8px);}
+.name-overlay.show{display:flex;}
+.name-card{width:min(430px,calc(100vw - 36px));padding:30px;border:1px solid rgba(239,205,160,.2);border-radius:22px;background:linear-gradient(145deg,#3a281b,#21160f);box-shadow:0 25px 70px rgba(0,0,0,.7);text-align:center;}
+.name-title{font-size:28px;font-weight:900;color:#f5dfbd;margin-bottom:8px;}
+.name-subtitle{color:#a99781;font-size:14px;margin-bottom:20px;}
+.name-input{width:100%;padding:14px 16px;border-radius:13px;border:1px solid rgba(255,255,255,.14);background:#17110c;color:#fff;font-size:17px;font-weight:700;outline:none;text-align:center;box-shadow:inset 0 2px 8px rgba(0,0,0,.35);}
+.name-input:focus{border-color:rgba(224,177,109,.6);box-shadow:0 0 0 3px rgba(224,177,109,.1),inset 0 2px 8px rgba(0,0,0,.35);}
+.name-actions{display:flex;gap:10px;margin-top:18px;}
+.name-save,.name-cancel{flex:1;border:0;border-radius:12px;padding:12px 18px;color:#fff;font-size:15px;font-weight:850;cursor:pointer;}
+.name-save{background:linear-gradient(135deg,#b77b3d,#e0b16d);box-shadow:0 6px 15px rgba(0,0,0,.25);}
+.name-cancel{background:rgba(255,255,255,.08);}
+.online-player-name{cursor:pointer;}
+.online-player-name:hover{text-decoration:underline;text-underline-offset:3px;}
+</style>
+
 <style id="settings-style">
 .settings-overlay{position:fixed;inset:0;z-index:1200;display:none;align-items:center;justify-content:center;background:rgba(5,4,3,.72);backdrop-filter:blur(7px);}
 .settings-overlay.show{display:flex;}
@@ -844,6 +861,7 @@ body {
             <button class="menu-button" id="localPlayBtn">🎮 2 Oyuncu — Aynı Bilgisayar</button>
             <button class="menu-button" id="aiPlayBtn">🤖 Yapay Zekâya Karşı</button>
             <button class="menu-button" id="onlinePlayBtn">🌐 Arkadaşlarla Oyna</button>
+            <button class="menu-button player-name-menu-btn" id="playerNameBtn">👤 İsim Değiştir</button>
             <button class="menu-button menu-settings-btn" id="settingsBtn">⚙️ Ayarlar</button>
         </div>
     </div>
@@ -896,11 +914,23 @@ body {
         </div>
     </div>
 
+    <div class="name-overlay" id="nameOverlay">
+        <div class="name-card">
+            <div class="name-title">👤 Oyuncu Adı</div>
+            <div class="name-subtitle">İsmini yaz. Boş bırakırsan "Oyuncu" olarak görünür.</div>
+            <input class="name-input" id="playerNameInput" maxlength="16" autocomplete="off" placeholder="Oyuncu">
+            <div class="name-actions">
+                <button class="name-save" id="savePlayerNameBtn">Kaydet</button>
+                <button class="name-cancel" id="cancelPlayerNameBtn">İptal</button>
+            </div>
+        </div>
+    </div>
+
     <div id="gameScreen" class="hidden">
         <button class="menu-open-btn" id="backToMenuBtn">☰ Menü</button>
         <div class="game-wrapper">
         <div id="badge-red" class="wall-badge badge-red active-turn">
-            <span>🔴 Kırmızı</span>
+            <span class="online-player-name" id="redPlayerName">🔴 Kırmızı</span>
             <span>🧱 <span id="count-red">10</span></span>
         </div>
 
@@ -909,7 +939,7 @@ body {
         </div>
 
         <div id="badge-blue" class="wall-badge badge-blue">
-            <span>🔵 Mavi</span>
+            <span class="online-player-name" id="bluePlayerName">🔵 Mavi</span>
             <span>🧱 <span id="count-blue">10</span></span>
         </div>
 
@@ -1064,143 +1094,141 @@ const board = document.getElementById('board');
         let onlineSocket = null;
         let onlineRoomCode = '';
         let onlineStarted = false;
-        let onlineConnecting = false;
-        let onlineClosingManually = false;
 
-        function onlineSetError(message='') {
-            onlineError.innerText = message;
+        let playerName = localStorage.getItem('quorix-player-name') || 'Oyuncu';
+        let onlinePlayerNames = {1:'Oyuncu', 2:'Oyuncu'};
+
+        function cleanPlayerName(value) {
+            const name = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+            return name || 'Oyuncu';
         }
 
+        playerName = cleanPlayerName(playerName);
+
+        function updatePlayerNameUI() {
+            const red = document.getElementById('redPlayerName');
+            const blue = document.getElementById('bluePlayerName');
+            if (!red || !blue) return;
+
+            if (onlineMode) {
+                red.textContent = '🔴 ' + cleanPlayerName(onlinePlayerNames[1]);
+                blue.textContent = '🔵 ' + cleanPlayerName(onlinePlayerNames[2]);
+            } else {
+                red.textContent = '🔴 Kırmızı';
+                blue.textContent = '🔵 Mavi';
+            }
+        }
+
+        function openNameEditor() {
+            const overlay = document.getElementById('nameOverlay');
+            const input = document.getElementById('playerNameInput');
+            if (!overlay || !input) return;
+            input.value = playerName === 'Oyuncu' ? '' : playerName;
+            overlay.classList.add('show');
+            setTimeout(() => { input.focus(); input.select(); }, 50);
+        }
+
+        function closeNameEditor() {
+            const overlay = document.getElementById('nameOverlay');
+            if (overlay) overlay.classList.remove('show');
+        }
+
+        function savePlayerName() {
+            const input = document.getElementById('playerNameInput');
+            playerName = cleanPlayerName(input ? input.value : '');
+            localStorage.setItem('quorix-player-name', playerName);
+
+            if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) {
+                onlineSocket.send(JSON.stringify({type:'set-name', name:playerName}));
+            }
+
+            if (onlineMode && onlinePlayer) {
+                onlinePlayerNames[onlinePlayer] = playerName;
+            }
+            updatePlayerNameUI();
+            closeNameEditor();
+            SFX.click();
+        }
+
+        document.getElementById('playerNameBtn').addEventListener('click', () => {
+            SFX.click();
+            openNameEditor();
+        });
+        document.getElementById('savePlayerNameBtn').addEventListener('click', savePlayerName);
+        document.getElementById('cancelPlayerNameBtn').addEventListener('click', () => {
+            SFX.click();
+            closeNameEditor();
+        });
+        document.getElementById('nameOverlay').addEventListener('click', (e) => {
+            if (e.target.id === 'nameOverlay') closeNameEditor();
+        });
+        document.getElementById('playerNameInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') savePlayerName();
+            if (e.key === 'Escape') closeNameEditor();
+        });
+        document.getElementById('redPlayerName').addEventListener('click', openNameEditor);
+        document.getElementById('bluePlayerName').addEventListener('click', openNameEditor);
+
+        function onlineSetError(message='') { onlineError.innerText = message; }
         function onlineUrl() {
-            // Render Web Service üzerinde çalışan Quorix WebSocket sunucusu.
             return 'wss://quorix-online.onrender.com';
         }
-
         function connectOnline() {
             const url = onlineUrl();
-            if (!url) {
-                onlineSetError('Online mod için sunucu adresi bulunamadı.');
-                return null;
-            }
-
-            if (onlineSocket && (
-                onlineSocket.readyState === WebSocket.OPEN ||
-                onlineSocket.readyState === WebSocket.CONNECTING
-            )) {
-                return onlineSocket;
-            }
-
-            onlineConnecting = true;
-            onlineClosingManually = false;
-            onlineSetError('');
-            onlineStatus.innerText = 'Sunucuya bağlanılıyor...';
-
-            try {
-                onlineSocket = new WebSocket(url);
-            } catch (err) {
-                onlineConnecting = false;
-                onlineSetError('Sunucu bağlantısı başlatılamadı.');
-                return null;
-            }
-
-            onlineSocket.onopen = () => {
-                onlineConnecting = false;
-                onlineSetError('');
-                if (!onlineStarted) onlineStatus.innerText = 'Bağlandı. Oda oluşturabilir veya kodla katılabilirsin.';
-            };
-
-            onlineSocket.onerror = () => {
-                onlineConnecting = false;
-                onlineSetError('Sunucuya bağlanılamadı. Render sunucusu uyanıyor olabilir, tekrar dene.');
-            };
-
+            if (!url) { onlineSetError('Online mod için oyunu sunucu üzerinden açmalısın.'); return null; }
+            if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) return onlineSocket;
+            onlineSocket = new WebSocket(url);
+            onlineSocket.onopen = () => onlineSetError('');
+            onlineSocket.onerror = () => onlineSetError('Sunucu bağlantısı kurulamadı.');
             onlineSocket.onclose = () => {
-                onlineConnecting = false;
-                if (onlineClosingManually) return;
-
                 if (onlineMode && !gameOver) {
                     onlineStarted = false;
                     onlineStatus.innerText = 'Bağlantı kapandı.';
-                    onlineSetError('Sunucu bağlantısı kesildi. Maç sonlandırıldı.');
+                    onlineSetError('Sunucu bağlantısı kesildi.');
                 }
             };
-
             onlineSocket.onmessage = e => {
-                let msg;
-                try { msg = JSON.parse(e.data); } catch { return; }
-
+                let msg; try { msg = JSON.parse(e.data); } catch { return; }
                 if (msg.type === 'room-created' || msg.type === 'joined') {
-                    onlinePlayer = Number(msg.player);
-                    onlineRoomCode = String(msg.code || '').toUpperCase();
-
-                    document.getElementById('roomCodeText').innerText = onlineRoomCode;
-                    document.getElementById('onlineActions').style.display = 'none';
-                    document.getElementById('roomInfo').style.display = 'block';
-
-                    if (msg.player === 1) {
-                        onlineStatus.innerText = 'Arkadaşın bekleniyor...';
-                    } else {
-                        onlineMode = true;
-                        onlineStatus.innerText = 'Odaya katıldın. Rakibin oyunu başlatıyor...';
-                    }
-                    onlineSetError('');
-                    return;
+                    onlinePlayer = msg.player;
+                    onlineRoomCode = msg.code;
+                    if (msg.playerNames) onlinePlayerNames = {...onlinePlayerNames, ...msg.playerNames};
+                    onlinePlayerNames[onlinePlayer] = playerName;
+                    document.getElementById('roomCodeText').innerText = msg.code;
+                    document.getElementById('onlineActions').style.display='none';
+                    document.getElementById('roomInfo').style.display='block';
+                    onlineStatus.innerText = msg.player === 1 ? 'Arkadaşın bekleniyor...' : 'Rakip aranıyor...';
+                    if (msg.type === 'joined') onlineMode = true;
                 }
-
                 if (msg.type === 'game-start') {
-                    onlineMode = true;
-                    onlineStarted = true;
-                    onlinePlayer = Number(msg.player || onlinePlayer);
+                    if (msg.playerNames) onlinePlayerNames = {...onlinePlayerNames, ...msg.playerNames};
+                    onlineMode = true; onlineStarted = true;
+                    updatePlayerNameUI();
                     onlineStatus.innerText = 'Rakip bağlandı! Maç başlıyor...';
-                    onlineSetError('');
-
                     onlineOverlay.classList.remove('show');
                     aiMode = false;
                     showGame();
-                    restartGame(true);
+                    restartGame();
                     updateOnlineTurnStatus();
-                    return;
                 }
-
-                if (msg.type === 'action' && onlineStarted) {
-                    applyOnlineAction(Number(msg.player), msg.action);
-                    return;
+                if (msg.type === 'player-name-changed') {
+                    if (msg.playerNames) onlinePlayerNames = {...onlinePlayerNames, ...msg.playerNames};
+                    else if (msg.player && msg.name) onlinePlayerNames[msg.player] = cleanPlayerName(msg.name);
+                    updatePlayerNameUI();
                 }
-
+                if (msg.type === 'action' && onlineStarted) applyOnlineAction(msg.player, msg.action);
                 if (msg.type === 'opponent-left') {
                     onlineStarted = false;
                     onlineStatus.innerText = 'Rakip oyundan ayrıldı.';
-                    onlineSetError('Rakibin odadan ayrıldı.');
-                    return;
+                    onlineSetError('Rakip bağlantısı kesildi.');
                 }
-
-                if (msg.type === 'room-closed') {
-                    onlineStarted = false;
-                    onlineSetError('Oda kapatıldı.');
-                    return;
-                }
-
-                if (msg.type === 'error') {
-                    onlineSetError(msg.message || 'Online işlem başarısız.');
-                    return;
-                }
+                if (msg.type === 'error') onlineSetError(msg.message || 'Bir hata oluştu.');
             };
-
             return onlineSocket;
         }
-
         function sendOnlineAction(action) {
-            if (!onlineMode || !onlineStarted || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) {
-                onlineSetError('Sunucu bağlantısı yok.');
-                return false;
-            }
-
-            onlineSocket.send(JSON.stringify({
-                type: 'action',
-                player: onlinePlayer,
-                action
-            }));
-            return true;
+            if (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN || !onlineStarted) return;
+            onlineSocket.send(JSON.stringify({type:'action', player:onlinePlayer, action}));
         }
         function updateOnlineTurnStatus() {
             if (!onlineMode) return;
@@ -1240,45 +1268,31 @@ const board = document.getElementById('board');
             }
         }
         function closeOnlineConnection() {
-            onlineClosingManually = true;
-            onlineStarted = false;
-            onlineMode = false;
-            onlinePlayer = 0;
-            onlineRoomCode = '';
-
-            if (onlineSocket) {
-                try {
-                    if (onlineSocket.readyState === WebSocket.OPEN) {
-                        onlineSocket.send(JSON.stringify({type:'leave'}));
-                    }
-                    onlineSocket.close();
-                } catch(e) {}
-                onlineSocket = null;
-            }
+            onlineStarted=false; onlineMode=false; onlinePlayer=0; onlineRoomCode='';
+            onlinePlayerNames = {1:'Oyuncu', 2:'Oyuncu'};
+            updatePlayerNameUI();
+            if(onlineSocket){ try{onlineSocket.close();}catch(e){} onlineSocket=null; }
             document.getElementById('onlineActions').style.display='flex';
             document.getElementById('roomInfo').style.display='none';
             document.getElementById('roomCodeInput').value='';
             onlineSetError('');
         }
         document.getElementById('onlinePlayBtn').addEventListener('click',()=>{
-            SFX.click();
-            mainMenu.style.display='none';
-            onlineOverlay.classList.add('show');
-            onlineSetError('');
-            onlineStatus.innerText = 'Sunucuya bağlanılıyor...';
+            SFX.click(); mainMenu.style.display='none'; onlineOverlay.classList.add('show'); onlineSetError('');
             document.getElementById('onlineActions').style.display='flex';
             document.getElementById('roomInfo').style.display='none';
+            updatePlayerNameUI();
             connectOnline();
         });
         document.getElementById('createRoomBtn').addEventListener('click',()=>{
             SFX.click(); const ws=connectOnline();
-            if(ws) { const send=()=>ws.send(JSON.stringify({type:'create'})); if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true}); }
+            if(ws) { const send=()=>ws.send(JSON.stringify({type:'create',name:playerName})); if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true}); }
         });
         document.getElementById('joinRoomBtn').addEventListener('click',()=>{
             SFX.click(); const code=document.getElementById('roomCodeInput').value.trim().toUpperCase();
             if(code.length!==6){onlineSetError('6 haneli oda kodunu gir.');return;}
             const ws=connectOnline();
-            if(ws){ const send=()=>ws.send(JSON.stringify({type:'join',code})); if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true}); }
+            if(ws){ const send=()=>ws.send(JSON.stringify({type:'join',code,name:playerName})); if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true}); }
         });
         document.getElementById('copyRoomBtn').addEventListener('click',async()=>{
             try{await navigator.clipboard.writeText(onlineRoomCode); onlineSetError('Oda kodu kopyalandı.');}catch{onlineSetError('Kodu elle kopyalayabilirsin: '+onlineRoomCode);}
@@ -1500,9 +1514,7 @@ const board = document.getElementById('board');
 
                 if (turn === 1) p1Pos = { r, c };
                 else p2Pos = { r, c };
-                if (onlineMode) {
-                if (!sendOnlineAction({type:'move', r, c})) return;
-            }
+                if (onlineMode) sendOnlineAction({type:'move', r, c});
 
                 renderPawns({ player: movingPlayer, from: oldPos });
                 checkWin();
@@ -1693,9 +1705,7 @@ const board = document.getElementById('board');
 
             clearWallPreview();
             hoverWallTarget = null;
-            if (onlineMode) {
-                if (!sendOnlineAction({type:'wall', r:wr, c:wc, dir:wdir})) return;
-            }
+            if (onlineMode) sendOnlineAction({type:'wall', r:wr, c:wc, dir:wdir});
             switchTurn();
         }
 
@@ -1772,12 +1782,7 @@ const board = document.getElementById('board');
             return document.querySelector(`[data-row='${r}'][data-col='${c}']`);
         }
 
-        function restartGame(onlineStart = false) {
-            if (onlineMode && onlineStarted && !onlineStart) {
-                onlineSetError('Online maç sırasında yeniden başlatma kapalıdır.');
-                return;
-            }
-
+        function restartGame() {
             aiScheduleToken++;
             if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
             aiThinking = false;
@@ -1807,16 +1812,9 @@ const board = document.getElementById('board');
             updateHighlights();
         }
 
-        document.getElementById('restartBtn').addEventListener('click', () => {
-            SFX.click();
-            if (onlineMode && onlineStarted) {
-                onlineSetError('Online maçta yeniden başlatma kullanılamaz.');
-                return;
-            }
-            restartGame();
-        });
+        document.getElementById('restartBtn').addEventListener('click', () => { SFX.click(); restartGame(); });
         document.addEventListener('keydown', e => {
-            if (e.key.toLowerCase() === 'r' && !(onlineMode && onlineStarted)) restartGame();
+            if (e.key.toLowerCase() === 'r') restartGame();
         });
 
 
@@ -2010,6 +2008,7 @@ const board = document.getElementById('board');
             switchTurn();
         }
 
+        updatePlayerNameUI();
         initGame();
     </script>
 </body>
