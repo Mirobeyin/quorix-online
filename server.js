@@ -17,7 +17,6 @@ const server = http.createServer((req, res) => {
 
     console.log('HTTP REQUEST:', req.method, req.url);
 
-    // URL'deki ? gibi query parametrelerini temizle
     const pathname = String(req.url || '/').split('?')[0];
 
     // -------------------------------------------------
@@ -109,7 +108,7 @@ const wss = new WebSocket.Server({
 });
 
 // =====================================================
-// ROOMS
+// ODALAR
 // =====================================================
 
 const rooms = new Map();
@@ -206,9 +205,20 @@ wss.on('connection', (ws) => {
 
         // =================================================
         // ODA OLUŞTUR
+        // Client: { type: "create" }
         // =================================================
 
-        if (data.type === 'create-room') {
+        if (data.type === 'create') {
+
+            if (socketInfo.has(ws)) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Zaten bir odaya bağlısın.'
+                });
+
+                return;
+            }
 
             const roomCode = generateRoomCode();
 
@@ -226,9 +236,10 @@ wss.on('connection', (ws) => {
                 player: 1
             });
 
+            // Client "code" bekliyor
             send(ws, {
                 type: 'room-created',
-                roomCode: roomCode,
+                code: roomCode,
                 player: 1
             });
 
@@ -241,13 +252,34 @@ wss.on('connection', (ws) => {
 
         // =================================================
         // ODAYA KATIL
+        // Client: { type: "join", code: "ABC123" }
         // =================================================
 
-        if (data.type === 'join-room') {
+        if (data.type === 'join') {
+
+            if (socketInfo.has(ws)) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Zaten bir odaya bağlısın.'
+                });
+
+                return;
+            }
 
             const roomCode = String(
-                data.roomCode || ''
+                data.code || ''
             ).trim().toUpperCase();
+
+            if (!roomCode) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Oda kodu girilmedi.'
+                });
+
+                return;
+            }
 
             const room = rooms.get(roomCode);
 
@@ -284,20 +316,14 @@ wss.on('connection', (ws) => {
             // Oyuncu 2'ye bilgi
             send(ws, {
                 type: 'joined',
-                roomCode: roomCode,
+                code: roomCode,
                 player: 2
             });
 
-            // Oyuncu 1'e rakibin geldiğini bildir
-            send(room.player1, {
-                type: 'opponent-joined',
-                player: 2
-            });
-
-            // Oyunu başlat
+            // İki oyuncuya da oyunun başladığını bildir
             broadcastRoom(room, {
                 type: 'game-start',
-                roomCode: roomCode,
+                code: roomCode,
                 turn: room.turn
             });
 
@@ -310,6 +336,12 @@ wss.on('connection', (ws) => {
 
         // =================================================
         // OYUN HAMLESİ
+        // Client:
+        // {
+        //   type: "action",
+        //   player: 1,
+        //   action: {...}
+        // }
         // =================================================
 
         if (data.type === 'action') {
@@ -359,7 +391,8 @@ wss.on('connection', (ws) => {
             if (opponent) {
 
                 send(opponent, {
-                    type: 'opponent-action',
+                    type: 'action',
+                    player: info.player,
                     action: data.action
                 });
             }
@@ -369,21 +402,6 @@ wss.on('connection', (ws) => {
                 info.player === 1
                     ? 2
                     : 1;
-
-            // Oyuncunun kendisine yeni sıra bilgisini gönder
-            send(ws, {
-                type: 'turn-changed',
-                turn: room.turn
-            });
-
-            // Rakibe de yeni sıra bilgisini gönder
-            if (opponent) {
-
-                send(opponent, {
-                    type: 'turn-changed',
-                    turn: room.turn
-                });
-            }
 
             console.log(
                 `Hamle: Oda ${info.roomCode} | Oyuncu ${info.player}`
