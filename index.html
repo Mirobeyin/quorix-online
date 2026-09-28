@@ -1064,59 +1064,143 @@ const board = document.getElementById('board');
         let onlineSocket = null;
         let onlineRoomCode = '';
         let onlineStarted = false;
+        let onlineConnecting = false;
+        let onlineClosingManually = false;
 
-        function onlineSetError(message='') { onlineError.innerText = message; }
-        function onlineUrl() {
-            if (location.protocol === 'file:') return null;
-            return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+        function onlineSetError(message='') {
+            onlineError.innerText = message;
         }
+
+        function onlineUrl() {
+            // Render Web Service üzerinde çalışan Quorix WebSocket sunucusu.
+            return 'wss://quorix-online.onrender.com';
+        }
+
         function connectOnline() {
             const url = onlineUrl();
-            if (!url) { onlineSetError('Online mod için oyunu sunucu üzerinden açmalısın.'); return null; }
-            if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) return onlineSocket;
-            onlineSocket = new WebSocket(url);
-            onlineSocket.onopen = () => onlineSetError('');
-            onlineSocket.onerror = () => onlineSetError('Sunucu bağlantısı kurulamadı.');
+            if (!url) {
+                onlineSetError('Online mod için sunucu adresi bulunamadı.');
+                return null;
+            }
+
+            if (onlineSocket && (
+                onlineSocket.readyState === WebSocket.OPEN ||
+                onlineSocket.readyState === WebSocket.CONNECTING
+            )) {
+                return onlineSocket;
+            }
+
+            onlineConnecting = true;
+            onlineClosingManually = false;
+            onlineSetError('');
+            onlineStatus.innerText = 'Sunucuya bağlanılıyor...';
+
+            try {
+                onlineSocket = new WebSocket(url);
+            } catch (err) {
+                onlineConnecting = false;
+                onlineSetError('Sunucu bağlantısı başlatılamadı.');
+                return null;
+            }
+
+            onlineSocket.onopen = () => {
+                onlineConnecting = false;
+                onlineSetError('');
+                if (!onlineStarted) onlineStatus.innerText = 'Bağlandı. Oda oluşturabilir veya kodla katılabilirsin.';
+            };
+
+            onlineSocket.onerror = () => {
+                onlineConnecting = false;
+                onlineSetError('Sunucuya bağlanılamadı. Render sunucusu uyanıyor olabilir, tekrar dene.');
+            };
+
             onlineSocket.onclose = () => {
+                onlineConnecting = false;
+                if (onlineClosingManually) return;
+
                 if (onlineMode && !gameOver) {
                     onlineStarted = false;
                     onlineStatus.innerText = 'Bağlantı kapandı.';
-                    onlineSetError('Sunucu bağlantısı kesildi.');
+                    onlineSetError('Sunucu bağlantısı kesildi. Maç sonlandırıldı.');
                 }
             };
+
             onlineSocket.onmessage = e => {
-                let msg; try { msg = JSON.parse(e.data); } catch { return; }
+                let msg;
+                try { msg = JSON.parse(e.data); } catch { return; }
+
                 if (msg.type === 'room-created' || msg.type === 'joined') {
-                    onlinePlayer = msg.player;
-                    onlineRoomCode = msg.code;
-                    document.getElementById('roomCodeText').innerText = msg.code;
-                    document.getElementById('onlineActions').style.display='none';
-                    document.getElementById('roomInfo').style.display='block';
-                    onlineStatus.innerText = msg.player === 1 ? 'Arkadaşın bekleniyor...' : 'Rakip aranıyor...';
-                    if (msg.type === 'joined') onlineMode = true;
+                    onlinePlayer = Number(msg.player);
+                    onlineRoomCode = String(msg.code || '').toUpperCase();
+
+                    document.getElementById('roomCodeText').innerText = onlineRoomCode;
+                    document.getElementById('onlineActions').style.display = 'none';
+                    document.getElementById('roomInfo').style.display = 'block';
+
+                    if (msg.player === 1) {
+                        onlineStatus.innerText = 'Arkadaşın bekleniyor...';
+                    } else {
+                        onlineMode = true;
+                        onlineStatus.innerText = 'Odaya katıldın. Rakibin oyunu başlatıyor...';
+                    }
+                    onlineSetError('');
+                    return;
                 }
+
                 if (msg.type === 'game-start') {
-                    onlineMode = true; onlineStarted = true;
+                    onlineMode = true;
+                    onlineStarted = true;
+                    onlinePlayer = Number(msg.player || onlinePlayer);
                     onlineStatus.innerText = 'Rakip bağlandı! Maç başlıyor...';
+                    onlineSetError('');
+
                     onlineOverlay.classList.remove('show');
                     aiMode = false;
                     showGame();
-                    restartGame();
+                    restartGame(true);
                     updateOnlineTurnStatus();
+                    return;
                 }
-                if (msg.type === 'action' && onlineStarted) applyOnlineAction(msg.player, msg.action);
+
+                if (msg.type === 'action' && onlineStarted) {
+                    applyOnlineAction(Number(msg.player), msg.action);
+                    return;
+                }
+
                 if (msg.type === 'opponent-left') {
                     onlineStarted = false;
                     onlineStatus.innerText = 'Rakip oyundan ayrıldı.';
-                    onlineSetError('Rakip bağlantısı kesildi.');
+                    onlineSetError('Rakibin odadan ayrıldı.');
+                    return;
                 }
-                if (msg.type === 'error') onlineSetError(msg.message || 'Bir hata oluştu.');
+
+                if (msg.type === 'room-closed') {
+                    onlineStarted = false;
+                    onlineSetError('Oda kapatıldı.');
+                    return;
+                }
+
+                if (msg.type === 'error') {
+                    onlineSetError(msg.message || 'Online işlem başarısız.');
+                    return;
+                }
             };
+
             return onlineSocket;
         }
+
         function sendOnlineAction(action) {
-            if (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN || !onlineStarted) return;
-            onlineSocket.send(JSON.stringify({type:'action', player:onlinePlayer, action}));
+            if (!onlineMode || !onlineStarted || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) {
+                onlineSetError('Sunucu bağlantısı yok.');
+                return false;
+            }
+
+            onlineSocket.send(JSON.stringify({
+                type: 'action',
+                player: onlinePlayer,
+                action
+            }));
+            return true;
         }
         function updateOnlineTurnStatus() {
             if (!onlineMode) return;
@@ -1156,15 +1240,32 @@ const board = document.getElementById('board');
             }
         }
         function closeOnlineConnection() {
-            onlineStarted=false; onlineMode=false; onlinePlayer=0; onlineRoomCode='';
-            if(onlineSocket){ try{onlineSocket.close();}catch(e){} onlineSocket=null; }
+            onlineClosingManually = true;
+            onlineStarted = false;
+            onlineMode = false;
+            onlinePlayer = 0;
+            onlineRoomCode = '';
+
+            if (onlineSocket) {
+                try {
+                    if (onlineSocket.readyState === WebSocket.OPEN) {
+                        onlineSocket.send(JSON.stringify({type:'leave'}));
+                    }
+                    onlineSocket.close();
+                } catch(e) {}
+                onlineSocket = null;
+            }
             document.getElementById('onlineActions').style.display='flex';
             document.getElementById('roomInfo').style.display='none';
             document.getElementById('roomCodeInput').value='';
             onlineSetError('');
         }
         document.getElementById('onlinePlayBtn').addEventListener('click',()=>{
-            SFX.click(); mainMenu.style.display='none'; onlineOverlay.classList.add('show'); onlineSetError('');
+            SFX.click();
+            mainMenu.style.display='none';
+            onlineOverlay.classList.add('show');
+            onlineSetError('');
+            onlineStatus.innerText = 'Sunucuya bağlanılıyor...';
             document.getElementById('onlineActions').style.display='flex';
             document.getElementById('roomInfo').style.display='none';
             connectOnline();
@@ -1399,7 +1500,9 @@ const board = document.getElementById('board');
 
                 if (turn === 1) p1Pos = { r, c };
                 else p2Pos = { r, c };
-                if (onlineMode) sendOnlineAction({type:'move', r, c});
+                if (onlineMode) {
+                if (!sendOnlineAction({type:'move', r, c})) return;
+            }
 
                 renderPawns({ player: movingPlayer, from: oldPos });
                 checkWin();
@@ -1590,7 +1693,9 @@ const board = document.getElementById('board');
 
             clearWallPreview();
             hoverWallTarget = null;
-            if (onlineMode) sendOnlineAction({type:'wall', r:wr, c:wc, dir:wdir});
+            if (onlineMode) {
+                if (!sendOnlineAction({type:'wall', r:wr, c:wc, dir:wdir})) return;
+            }
             switchTurn();
         }
 
@@ -1667,7 +1772,12 @@ const board = document.getElementById('board');
             return document.querySelector(`[data-row='${r}'][data-col='${c}']`);
         }
 
-        function restartGame() {
+        function restartGame(onlineStart = false) {
+            if (onlineMode && onlineStarted && !onlineStart) {
+                onlineSetError('Online maç sırasında yeniden başlatma kapalıdır.');
+                return;
+            }
+
             aiScheduleToken++;
             if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
             aiThinking = false;
@@ -1697,9 +1807,16 @@ const board = document.getElementById('board');
             updateHighlights();
         }
 
-        document.getElementById('restartBtn').addEventListener('click', () => { SFX.click(); restartGame(); });
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            SFX.click();
+            if (onlineMode && onlineStarted) {
+                onlineSetError('Online maçta yeniden başlatma kullanılamaz.');
+                return;
+            }
+            restartGame();
+        });
         document.addEventListener('keydown', e => {
-            if (e.key.toLowerCase() === 'r') restartGame();
+            if (e.key.toLowerCase() === 'r' && !(onlineMode && onlineStarted)) restartGame();
         });
 
 

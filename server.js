@@ -1,251 +1,331 @@
-const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
-const path = require("path");
+const http = require('http');
+const { WebSocketServer } = require('ws');
 
-const app = express();
-const server = http.createServer(app);
+const PORT = Number(process.env.PORT) || 10000;
 
-const wss = new WebSocket.Server({ server });
+const server = http.createServer((req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store'
+    });
 
-// index.html ve diğer dosyaları yayınla
-app.use(express.static(path.join(__dirname)));
+    res.end('Quorix online server aktif.');
+});
 
-// Oyun odaları
+const wss = new WebSocketServer({ server });
+
 const rooms = new Map();
+const socketInfo = new Map();
 
-function send(ws, data) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(data));
-    }
-}
-
-function createRoomCode() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
+function makeCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code;
 
     do {
-        code = "";
+        code = '';
 
         for (let i = 0; i < 6; i++) {
             code += chars[Math.floor(Math.random() * chars.length)];
         }
-
     } while (rooms.has(code));
 
     return code;
 }
 
-wss.on("connection", (ws) => {
+function send(ws, message) {
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify(message));
+    }
+}
 
-    console.log("Oyuncu bağlandı.");
+function leave(ws) {
+    const info = socketInfo.get(ws);
 
-    ws.roomCode = null;
-    ws.player = null;
+    if (!info) return;
 
-    // -------------------------
-    // MESAJLAR
-    // -------------------------
+    const code = info.code;
+    const player = info.player;
 
-    ws.on("message", (data) => {
+    socketInfo.delete(ws);
+
+    if (!code) return;
+
+    const room = rooms.get(code);
+
+    if (!room) return;
+
+    const other =
+        player === 1
+            ? room.player2
+            : room.player1;
+
+    if (other) {
+        send(other, {
+            type: 'opponent-left'
+        });
+
+        socketInfo.delete(other);
+    }
+
+    rooms.delete(code);
+}
+
+wss.on('connection', (ws) => {
+
+    socketInfo.set(ws, {
+        code: null,
+        player: 0
+    });
+
+    send(ws, {
+        type: 'connected'
+    });
+
+    ws.on('message', (raw) => {
 
         let msg;
 
         try {
-            msg = JSON.parse(data.toString());
+            msg = JSON.parse(raw.toString());
         } catch {
+            send(ws, {
+                type: 'error',
+                message: 'Geçersiz veri gönderildi.'
+            });
+
             return;
         }
 
-        // =========================
+        const info = socketInfo.get(ws);
+
+        if (!info) return;
+
         // ODA OLUŞTUR
-        // =========================
+        if (msg.type === 'create') {
 
-        if (msg.type === "create") {
+            if (info.code) {
+                send(ws, {
+                    type: 'error',
+                    message: 'Zaten bir odadasın.'
+                });
 
-            const code = createRoomCode();
+                return;
+            }
+
+            const code = makeCode();
 
             const room = {
-                players: [],
+                code,
+                player1: ws,
+                player2: null,
+                turn: 1,
                 started: false
             };
 
             rooms.set(code, room);
 
-            room.players.push(ws);
-
-            ws.roomCode = code;
-            ws.player = 1;
-
-            send(ws, {
-                type: "room-created",
-                code: code,
+            socketInfo.set(ws, {
+                code,
                 player: 1
             });
 
-            console.log("Oda oluşturuldu:", code);
+            send(ws, {
+                type: 'room-created',
+                player: 1,
+                code
+            });
 
             return;
         }
 
-        // =========================
         // ODAYA KATIL
-        // =========================
+        if (msg.type === 'join') {
 
-        if (msg.type === "join") {
+            if (info.code) {
+                send(ws, {
+                    type: 'error',
+                    message: 'Zaten bir odadasın.'
+                });
 
-            const code = String(msg.code || "")
+                return;
+            }
+
+            const code = String(msg.code || '')
                 .trim()
                 .toUpperCase();
 
             const room = rooms.get(code);
 
             if (!room) {
-
                 send(ws, {
-                    type: "error",
-                    message: "Bu oda bulunamadı."
+                    type: 'error',
+                    message: 'Bu oda bulunamadı veya artık aktif değil.'
                 });
 
                 return;
             }
 
-            if (room.players.length >= 2) {
-
+            if (room.player2) {
                 send(ws, {
-                    type: "error",
-                    message: "Bu oda zaten dolu."
+                    type: 'error',
+                    message: 'Bu oda zaten dolu.'
                 });
 
                 return;
             }
 
-            room.players.push(ws);
+            room.player2 = ws;
+            room.started = true;
+            room.turn = 1;
 
-            ws.roomCode = code;
-            ws.player = 2;
-
-            send(ws, {
-                type: "joined",
-                code: code,
+            socketInfo.set(ws, {
+                code,
                 player: 2
             });
 
-            console.log("Oyuncu odaya katıldı:", code);
+            // 2. oyuncuya katıldı mesajı
+            send(ws, {
+                type: 'joined',
+                player: 2,
+                code
+            });
 
-            // İki oyuncu tamamlandı
-            if (room.players.length === 2) {
+            // İKİ OYUNCUYA DA OYUN BAŞLADI
+            send(room.player1, {
+                type: 'game-start',
+                player: 1,
+                code
+            });
 
-                room.started = true;
+            send(room.player2, {
+                type: 'game-start',
+                player: 2,
+                code
+            });
 
-                room.players.forEach((playerSocket) => {
+            return;
+        }
 
-                    send(playerSocket, {
-                        type: "game-start"
-                    });
+        // HAMLE
+        if (msg.type === 'action') {
 
+            const room = rooms.get(info.code);
+
+            if (!room || !room.started) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Maç henüz başlamadı.'
                 });
 
-                console.log("Oyun başladı:", code);
+                return;
             }
 
+            const player = Number(msg.player);
+            const action = msg.action;
+
+            // Oyuncu kontrolü
+            if (player !== info.player) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Oyuncu bilgisi geçersiz.'
+                });
+
+                return;
+            }
+
+            // Sıra kontrolü
+            if (player !== room.turn) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Şu anda senin sıran değil.'
+                });
+
+                return;
+            }
+
+            // Hamle kontrolü
+            if (
+                !action ||
+                (action.type !== 'move' &&
+                 action.type !== 'wall')
+            ) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Geçersiz hamle.'
+                });
+
+                return;
+            }
+
+            const other =
+                player === 1
+                    ? room.player2
+                    : room.player1;
+
+            // Rakibe hamleyi gönder
+            send(other, {
+                type: 'action',
+                player,
+                action
+            });
+
+            // Sırayı değiştir
+            room.turn =
+                player === 1
+                    ? 2
+                    : 1;
+
             return;
         }
 
-        // =========================
-        // OYUN HAMLESİ
-        // =========================
+        // ODADAN ÇIK
+        if (msg.type === 'leave') {
+            leave(ws);
+            return;
+        }
 
-        if (msg.type === "action") {
+        // PING
+        if (msg.type === 'ping') {
 
-            if (!ws.roomCode) return;
-
-            const room = rooms.get(ws.roomCode);
-
-            if (!room) return;
-
-            // Rakibe gönder
-            room.players.forEach((playerSocket) => {
-
-                if (playerSocket !== ws) {
-
-                    send(playerSocket, {
-                        type: "action",
-                        player: ws.player,
-                        action: msg.action
-                    });
-
-                }
-
+            send(ws, {
+                type: 'pong'
             });
 
             return;
         }
-
     });
 
-    // =========================
-    // BAĞLANTI KOPTU
-    // =========================
-
-    ws.on("close", () => {
-
-        console.log("Oyuncu ayrıldı.");
-
-        if (!ws.roomCode) return;
-
-        const room = rooms.get(ws.roomCode);
-
-        if (!room) return;
-
-        // Oyuncuyu odadan çıkar
-        room.players = room.players.filter(
-            playerSocket => playerSocket !== ws
-        );
-
-        // Diğer oyuncuya haber ver
-        room.players.forEach((playerSocket) => {
-
-            send(playerSocket, {
-                type: "opponent-left"
-            });
-
-        });
-
-        // Oda boşsa sil
-        if (room.players.length === 0) {
-
-            rooms.delete(ws.roomCode);
-
-            console.log(
-                "Oda silindi:",
-                ws.roomCode
-            );
-
-        } else {
-
-            room.started = false;
-        }
+    ws.on('close', () => {
+        leave(ws);
     });
 
-    ws.on("error", (error) => {
-        console.log("WebSocket hatası:", error.message);
+    ws.on('error', () => {
+        leave(ws);
     });
-
 });
 
-
-// =========================
-// SUNUCU
-// =========================
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-
+// SERVER BAŞLAT
+server.listen(PORT, '0.0.0.0', () => {
     console.log(
-        `Quorix sunucusu çalışıyor: http://localhost:${PORT}`
+        `Quorix server listening on port ${PORT}`
     );
-
 });
+
+// Render bağlantısının canlı kalmasına yardımcı olur
+setInterval(() => {
+
+    for (const ws of wss.clients) {
+
+        if (ws.readyState === 1) {
+
+            try {
+                ws.ping();
+            } catch {}
+        }
+    }
+
+}, 25000);
