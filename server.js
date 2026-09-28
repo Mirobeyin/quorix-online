@@ -19,23 +19,19 @@ const server = http.createServer((req, res) => {
 
     const pathname = String(req.url || '/').split('?')[0];
 
-    // -------------------------------------------------
+    // =================================================
     // ANA SAYFA
-    // -------------------------------------------------
+    // =================================================
 
     if (pathname === '/' || pathname === '/index.html') {
 
         const filePath = path.join(__dirname, 'index.html');
 
-        console.log('index.html yükleniyor:');
-        console.log(filePath);
-
         fs.readFile(filePath, (err, data) => {
 
             if (err) {
 
-                console.error('index.html OKUMA HATASI:');
-                console.error(err);
+                console.error('index.html okuma hatası:', err);
 
                 res.writeHead(500, {
                     'Content-Type': 'text/plain; charset=utf-8'
@@ -43,7 +39,6 @@ const server = http.createServer((req, res) => {
 
                 res.end(
                     'Quorix index.html bulunamadı.\n\n' +
-                    'Aranan dosya:\n' +
                     filePath
                 );
 
@@ -61,9 +56,9 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // -------------------------------------------------
+    // =================================================
     // SERVER TEST
-    // -------------------------------------------------
+    // =================================================
 
     if (pathname === '/health') {
 
@@ -76,9 +71,9 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // -------------------------------------------------
+    // =================================================
     // FAVICON
-    // -------------------------------------------------
+    // =================================================
 
     if (pathname === '/favicon.ico') {
 
@@ -88,9 +83,9 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // -------------------------------------------------
+    // =================================================
     // 404
-    // -------------------------------------------------
+    // =================================================
 
     res.writeHead(404, {
         'Content-Type': 'text/plain; charset=utf-8'
@@ -113,11 +108,11 @@ const wss = new WebSocket.Server({
 
 const rooms = new Map();
 
-// Her bağlantının hangi odada ve hangi oyuncu olduğunu tutar
+// Her WebSocket'in bilgisi
 const socketInfo = new Map();
 
 // =====================================================
-// ODA KODU OLUŞTUR
+// ODA KODU
 // =====================================================
 
 function generateRoomCode() {
@@ -131,12 +126,28 @@ function generateRoomCode() {
         code = '';
 
         for (let i = 0; i < 6; i++) {
-            code += chars[Math.floor(Math.random() * chars.length)];
+
+            code += chars[
+                Math.floor(Math.random() * chars.length)
+            ];
         }
 
     } while (rooms.has(code));
 
     return code;
+}
+
+// =====================================================
+// İSİM TEMİZLE
+// =====================================================
+
+function cleanPlayerName(name) {
+
+    name = String(name || '')
+        .trim()
+        .replace(/\s+/g, ' ');
+
+    return name.slice(0, 16) || 'Oyuncu';
 }
 
 // =====================================================
@@ -156,15 +167,15 @@ function send(ws, message) {
 // ODAYA MESAJ GÖNDER
 // =====================================================
 
-function broadcastRoom(room, message, except = null) {
+function broadcastRoom(room, message) {
 
     if (!room) return;
 
-    if (room.player1 && room.player1 !== except) {
+    if (room.player1) {
         send(room.player1, message);
     }
 
-    if (room.player2 && room.player2 !== except) {
+    if (room.player2) {
         send(room.player2, message);
     }
 }
@@ -177,9 +188,9 @@ wss.on('connection', (ws) => {
 
     console.log('Yeni WebSocket bağlantısı.');
 
-    // -------------------------------------------------
-    // MESAJ
-    // -------------------------------------------------
+    // =================================================
+    // MESAJ GELDİ
+    // =================================================
 
     ws.on('message', (raw) => {
 
@@ -191,7 +202,7 @@ wss.on('connection', (ws) => {
 
         } catch (error) {
 
-            console.log('Geçersiz JSON mesajı.');
+            console.log('Geçersiz JSON.');
 
             send(ws, {
                 type: 'error',
@@ -201,11 +212,15 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        console.log('WS MESSAGE:', data.type);
+        console.log(
+            'WS MESSAGE:',
+            data.type
+        );
 
         // =================================================
         // ODA OLUŞTUR
-        // Client: { type: "create" }
+        // Client:
+        // { type:"create", name:"Ahmet" }
         // =================================================
 
         if (data.type === 'create') {
@@ -223,28 +238,43 @@ wss.on('connection', (ws) => {
             const roomCode = generateRoomCode();
 
             const room = {
+
                 code: roomCode,
+
                 player1: ws,
                 player2: null,
+
+                player1Name: cleanPlayerName(data.name),
+                player2Name: 'Oyuncu',
+
                 turn: 1
             };
 
             rooms.set(roomCode, room);
 
             socketInfo.set(ws, {
+
                 roomCode: roomCode,
+
                 player: 1
             });
 
-            // Client "code" bekliyor
             send(ws, {
+
                 type: 'room-created',
+
                 code: roomCode,
-                player: 1
+
+                player: 1,
+
+                playerNames: {
+                    1: room.player1Name,
+                    2: room.player2Name
+                }
             });
 
             console.log(
-                `Oda oluşturuldu: ${roomCode} | Oyuncu 1`
+                `Oda oluşturuldu: ${roomCode} | Oyuncu 1: ${room.player1Name}`
             );
 
             return;
@@ -252,7 +282,8 @@ wss.on('connection', (ws) => {
 
         // =================================================
         // ODAYA KATIL
-        // Client: { type: "join", code: "ABC123" }
+        // Client:
+        // { type:"join", code:"ABC123", name:"Mehmet" }
         // =================================================
 
         if (data.type === 'join') {
@@ -269,7 +300,9 @@ wss.on('connection', (ws) => {
 
             const roomCode = String(
                 data.code || ''
-            ).trim().toUpperCase();
+            )
+            .trim()
+            .toUpperCase();
 
             if (!roomCode) {
 
@@ -283,7 +316,10 @@ wss.on('connection', (ws) => {
 
             const room = rooms.get(roomCode);
 
-            // Oda yok
+            // =================================================
+            // ODA YOK
+            // =================================================
+
             if (!room) {
 
                 send(ws, {
@@ -294,7 +330,10 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // Oda dolu
+            // =================================================
+            // ODA DOLU
+            // =================================================
+
             if (room.player1 && room.player2) {
 
                 send(ws, {
@@ -305,46 +344,73 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // Oyuncu 2
+            // =================================================
+            // OYUNCU 2
+            // =================================================
+
             room.player2 = ws;
 
+            room.player2Name =
+                cleanPlayerName(data.name);
+
             socketInfo.set(ws, {
+
                 roomCode: roomCode,
+
                 player: 2
             });
 
-            // Oyuncu 2'ye bilgi
+            // =================================================
+            // OYUNCU 2'YE BİLGİ
+            // =================================================
+
             send(ws, {
+
                 type: 'joined',
+
                 code: roomCode,
-                player: 2
+
+                player: 2,
+
+                playerNames: {
+                    1: room.player1Name,
+                    2: room.player2Name
+                }
             });
 
-            // İki oyuncuya da oyunun başladığını bildir
+            // =================================================
+            // OYUNU BAŞLAT
+            // =================================================
+
             broadcastRoom(room, {
+
                 type: 'game-start',
+
                 code: roomCode,
-                turn: room.turn
+
+                turn: room.turn,
+
+                playerNames: {
+                    1: room.player1Name,
+                    2: room.player2Name
+                }
             });
 
             console.log(
-                `Oyuncu 2 odaya katıldı: ${roomCode}`
+                `Oyuncu 2 odaya katıldı: ${roomCode} | Oyuncu 2: ${room.player2Name}`
             );
 
             return;
         }
 
         // =================================================
-        // OYUN HAMLESİ
+        // İSİM DEĞİŞTİR
+        //
         // Client:
-        // {
-        //   type: "action",
-        //   player: 1,
-        //   action: {...}
-        // }
+        // { type:"set-name", name:"Yeniİsim" }
         // =================================================
 
-        if (data.type === 'action') {
+        if (data.type === 'set-name') {
 
             const info = socketInfo.get(ws);
 
@@ -370,7 +436,87 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // Sıra kontrolü
+            const newName =
+                cleanPlayerName(data.name);
+
+            // Oyuncunun ismini güncelle
+            if (info.player === 1) {
+
+                room.player1Name = newName;
+
+            } else {
+
+                room.player2Name = newName;
+            }
+
+            console.log(
+                `İsim değişti: ${info.roomCode} | Oyuncu ${info.player} | ${newName}`
+            );
+
+            // =================================================
+            // İKİ OYUNCUYA DA YENİ İSİMLERİ GÖNDER
+            // =================================================
+
+            broadcastRoom(room, {
+
+                type: 'player-name-changed',
+
+                player: info.player,
+
+                name: newName,
+
+                playerNames: {
+                    1: room.player1Name,
+                    2: room.player2Name
+                }
+            });
+
+            return;
+        }
+
+        // =================================================
+        // OYUN HAMLESİ
+        //
+        // Client:
+        // {
+        //   type:"action",
+        //   player:1,
+        //   action:{...}
+        // }
+        // =================================================
+
+        if (data.type === 'action') {
+
+            const info = socketInfo.get(ws);
+
+            if (!info) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Bir odaya bağlı değilsin.'
+                });
+
+                return;
+            }
+
+            const room = rooms.get(
+                info.roomCode
+            );
+
+            if (!room) {
+
+                send(ws, {
+                    type: 'error',
+                    message: 'Oda artık mevcut değil.'
+                });
+
+                return;
+            }
+
+            // =================================================
+            // SIRA KONTROLÜ
+            // =================================================
+
             if (room.turn !== info.player) {
 
                 send(ws, {
@@ -381,30 +527,42 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // Rakip
+            // =================================================
+            // RAKİP
+            // =================================================
+
             const opponent =
                 info.player === 1
                     ? room.player2
                     : room.player1;
 
-            // Rakibe hamleyi gönder
+            // =================================================
+            // HAMLEYİ RAKİBE GÖNDER
+            // =================================================
+
             if (opponent) {
 
                 send(opponent, {
+
                     type: 'action',
+
                     player: info.player,
+
                     action: data.action
                 });
             }
 
-            // Sırayı değiştir
+            // =================================================
+            // SIRAYI DEĞİŞTİR
+            // =================================================
+
             room.turn =
                 info.player === 1
                     ? 2
                     : 1;
 
             console.log(
-                `Hamle: Oda ${info.roomCode} | Oyuncu ${info.player}`
+                `Hamle: ${info.roomCode} | Oyuncu ${info.player}`
             );
 
             return;
@@ -428,9 +586,12 @@ wss.on('connection', (ws) => {
         // =================================================
 
         send(ws, {
+
             type: 'error',
+
             message: 'Bilinmeyen mesaj türü.'
         });
+
     });
 
     // =================================================
@@ -439,45 +600,67 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
 
-        console.log('WebSocket bağlantısı kapandı.');
+        console.log(
+            'WebSocket bağlantısı kapandı.'
+        );
 
         const info = socketInfo.get(ws);
 
         if (!info) return;
 
-        const room = rooms.get(info.roomCode);
+        const room = rooms.get(
+            info.roomCode
+        );
 
         socketInfo.delete(ws);
 
         if (!room) return;
+
+        // =================================================
+        // RAKİP
+        // =================================================
 
         const opponent =
             info.player === 1
                 ? room.player2
                 : room.player1;
 
-        // Rakibe haber ver
+        // =================================================
+        // RAKİBE HABER VER
+        // =================================================
+
         if (opponent) {
 
             send(opponent, {
+
                 type: 'opponent-left'
             });
 
             socketInfo.delete(opponent);
 
             try {
+
                 opponent.close();
+
             } catch (error) {
+
                 // Bağlantı zaten kapanmış olabilir
+
             }
         }
 
-        // Odayı sil
-        rooms.delete(info.roomCode);
+        // =================================================
+        // ODAYI SİL
+        // =================================================
+
+        rooms.delete(
+            info.roomCode
+        );
 
         console.log(
             `Oda kapatıldı: ${info.roomCode}`
         );
+
     });
 
     // =================================================
@@ -490,37 +673,58 @@ wss.on('connection', (ws) => {
             'WebSocket hatası:',
             error.message
         );
+
     });
+
 });
 
 // =====================================================
 // SERVER'I BAŞLAT
 // =====================================================
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(
+    PORT,
+    '0.0.0.0',
+    () => {
 
-    console.log('====================================');
-    console.log('      QUORIX ONLINE SERVER');
-    console.log('====================================');
+        console.log(
+            '===================================='
+        );
 
-    console.log(
-        `Server portu: ${PORT}`
-    );
+        console.log(
+            '       QUORIX ONLINE SERVER'
+        );
 
-    console.log(
-        `Server aktif: http://0.0.0.0:${PORT}`
-    );
+        console.log(
+            '===================================='
+        );
 
-    console.log(
-        'index.html sunulmaya hazır.'
-    );
+        console.log(
+            `Server portu: ${PORT}`
+        );
 
-    console.log(
-        'WebSocket sunucusu aktif.'
-    );
+        console.log(
+            `Server aktif: http://0.0.0.0:${PORT}`
+        );
 
-    console.log('====================================');
-});
+        console.log(
+            'index.html sunulmaya hazır.'
+        );
+
+        console.log(
+            'WebSocket sunucusu aktif.'
+        );
+
+        console.log(
+            'Oyuncu isim sistemi aktif.'
+        );
+
+        console.log(
+            '===================================='
+        );
+
+    }
+);
 
 // =====================================================
 // WEBSOCKET CANLI TUTMA
@@ -535,14 +739,21 @@ const pingInterval = setInterval(() => {
             send(ws, {
                 type: 'ping'
             });
+
         }
+
     });
 
 }, 25000);
 
-// Server kapanırken interval'i temizle
+// =====================================================
+// SERVER KAPANIRKEN
+// =====================================================
+
 server.on('close', () => {
 
-    clearInterval(pingInterval);
+    clearInterval(
+        pingInterval
+    );
 
 });
