@@ -1,44 +1,126 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT) || 10000;
 
+const publicFile = path.join(__dirname, 'index.html');
+
+// ===============================
+// HTTP SERVER
+// ===============================
+
 const server = http.createServer((req, res) => {
-    res.writeHead(200, {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-store'
+
+    // Ana sayfa
+    if (req.url === '/' || req.url === '/index.html') {
+
+        fs.readFile(publicFile, (err, data) => {
+
+            if (err) {
+                console.error('index.html okunamadı:', err);
+
+                res.writeHead(500, {
+                    'Content-Type': 'text/plain; charset=utf-8'
+                });
+
+                res.end('index.html bulunamadı.');
+                return;
+            }
+
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-cache'
+            });
+
+            res.end(data);
+        });
+
+        return;
+    }
+
+    // Sağlık kontrolü
+    if (req.url === '/health') {
+
+        res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8'
+        });
+
+        res.end('Quorix online server aktif.');
+        return;
+    }
+
+    // Bilinmeyen sayfa
+    res.writeHead(404, {
+        'Content-Type': 'text/plain; charset=utf-8'
     });
 
-    res.end('Quorix online server aktif.');
+    res.end('Sayfa bulunamadı.');
 });
 
-const wss = new WebSocketServer({ server });
+
+// ===============================
+// WEBSOCKET SERVER
+// ===============================
+
+const wss = new WebSocketServer({
+    server
+});
 
 const rooms = new Map();
 const socketInfo = new Map();
 
+
+// ===============================
+// ODA KODU OLUŞTUR
+// ===============================
+
 function makeCode() {
+
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
     let code;
 
     do {
+
         code = '';
 
         for (let i = 0; i < 6; i++) {
-            code += chars[Math.floor(Math.random() * chars.length)];
+            code += chars[
+                Math.floor(Math.random() * chars.length)
+            ];
         }
+
     } while (rooms.has(code));
 
     return code;
 }
 
+
+// ===============================
+// MESAJ GÖNDER
+// ===============================
+
 function send(ws, message) {
+
     if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify(message));
+
+        try {
+            ws.send(JSON.stringify(message));
+        } catch (error) {
+            console.error('Mesaj gönderilemedi:', error);
+        }
     }
 }
 
+
+// ===============================
+// OYUNCUYU ODADAN ÇIKAR
+// ===============================
+
 function leave(ws) {
+
     const info = socketInfo.get(ws);
 
     if (!info) return;
@@ -60,34 +142,61 @@ function leave(ws) {
             : room.player1;
 
     if (other) {
+
         send(other, {
             type: 'opponent-left'
         });
 
         socketInfo.delete(other);
+
+        try {
+            other.close();
+        } catch {}
     }
 
     rooms.delete(code);
+
+    console.log(
+        `Oda kapatıldı: ${code}`
+    );
 }
 
+
+// ===============================
+// YENİ BAĞLANTI
+// ===============================
+
 wss.on('connection', (ws) => {
+
+    console.log('Yeni oyuncu bağlandı.');
 
     socketInfo.set(ws, {
         code: null,
         player: 0
     });
 
+
     send(ws, {
         type: 'connected'
     });
+
+
+    // ===========================
+    // MESAJLAR
+    // ===========================
 
     ws.on('message', (raw) => {
 
         let msg;
 
         try {
-            msg = JSON.parse(raw.toString());
+
+            msg = JSON.parse(
+                raw.toString()
+            );
+
         } catch {
+
             send(ws, {
                 type: 'error',
                 message: 'Geçersiz veri gönderildi.'
@@ -96,14 +205,20 @@ wss.on('connection', (ws) => {
             return;
         }
 
+
         const info = socketInfo.get(ws);
 
         if (!info) return;
 
+
+        // =========================
         // ODA OLUŞTUR
+        // =========================
+
         if (msg.type === 'create') {
 
             if (info.code) {
+
                 send(ws, {
                     type: 'error',
                     message: 'Zaten bir odadasın.'
@@ -111,37 +226,66 @@ wss.on('connection', (ws) => {
 
                 return;
             }
+
 
             const code = makeCode();
 
+
             const room = {
+
                 code,
+
                 player1: ws,
+
                 player2: null,
+
                 turn: 1,
+
                 started: false
+
             };
+
 
             rooms.set(code, room);
 
+
             socketInfo.set(ws, {
+
                 code,
+
                 player: 1
+
             });
 
+
+            console.log(
+                `Oda oluşturuldu: ${code}`
+            );
+
+
             send(ws, {
+
                 type: 'room-created',
+
                 player: 1,
+
                 code
+
             });
+
 
             return;
         }
 
+
+        // =========================
         // ODAYA KATIL
+        // =========================
+
         if (msg.type === 'join') {
 
             if (info.code) {
+
                 send(ws, {
                     type: 'error',
                     message: 'Zaten bir odadasın.'
@@ -150,128 +294,218 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            const code = String(msg.code || '')
-                .trim()
-                .toUpperCase();
+
+            const code = String(
+                msg.code || ''
+            )
+            .trim()
+            .toUpperCase();
+
 
             const room = rooms.get(code);
 
+
             if (!room) {
+
                 send(ws, {
+
                     type: 'error',
-                    message: 'Bu oda bulunamadı veya artık aktif değil.'
+
+                    message:
+                        'Bu oda bulunamadı veya artık aktif değil.'
+
                 });
 
                 return;
             }
+
 
             if (room.player2) {
+
                 send(ws, {
+
                     type: 'error',
-                    message: 'Bu oda zaten dolu.'
+
+                    message:
+                        'Bu oda zaten dolu.'
+
                 });
 
                 return;
             }
 
+
+            // İkinci oyuncuyu yerleştir
             room.player2 = ws;
+
             room.started = true;
+
             room.turn = 1;
 
+
             socketInfo.set(ws, {
+
                 code,
+
                 player: 2
+
             });
 
-            // 2. oyuncuya katıldı mesajı
+
+            console.log(
+                `Oyuncu odaya katıldı: ${code}`
+            );
+
+
+            // Oyuncu 2
             send(ws, {
+
                 type: 'joined',
+
                 player: 2,
+
                 code
+
             });
 
-            // İKİ OYUNCUYA DA OYUN BAŞLADI
+
+            // Oyuncu 1
             send(room.player1, {
+
                 type: 'game-start',
+
                 player: 1,
+
                 code
+
             });
 
+
+            // Oyuncu 2
             send(room.player2, {
+
                 type: 'game-start',
+
                 player: 2,
+
                 code
+
             });
+
+
+            console.log(
+                `Maç başladı: ${code}`
+            );
+
 
             return;
         }
 
+
+        // =========================
         // HAMLE
+        // =========================
+
         if (msg.type === 'action') {
 
-            const room = rooms.get(info.code);
+            const room =
+                rooms.get(info.code);
+
 
             if (!room || !room.started) {
 
                 send(ws, {
+
                     type: 'error',
-                    message: 'Maç henüz başlamadı.'
+
+                    message:
+                        'Maç henüz başlamadı.'
+
                 });
 
                 return;
             }
 
-            const player = Number(msg.player);
-            const action = msg.action;
 
-            // Oyuncu kontrolü
+            const player =
+                Number(msg.player);
+
+
+            const action =
+                msg.action;
+
+
+            // Oyuncu doğrulama
             if (player !== info.player) {
 
                 send(ws, {
+
                     type: 'error',
-                    message: 'Oyuncu bilgisi geçersiz.'
+
+                    message:
+                        'Oyuncu bilgisi geçersiz.'
+
                 });
 
                 return;
             }
+
 
             // Sıra kontrolü
             if (player !== room.turn) {
 
                 send(ws, {
+
                     type: 'error',
-                    message: 'Şu anda senin sıran değil.'
+
+                    message:
+                        'Şu anda senin sıran değil.'
+
                 });
 
                 return;
             }
+
 
             // Hamle kontrolü
             if (
                 !action ||
-                (action.type !== 'move' &&
-                 action.type !== 'wall')
+                (
+                    action.type !== 'move' &&
+                    action.type !== 'wall'
+                )
             ) {
 
                 send(ws, {
+
                     type: 'error',
-                    message: 'Geçersiz hamle.'
+
+                    message:
+                        'Geçersiz hamle.'
+
                 });
 
                 return;
             }
+
 
             const other =
                 player === 1
                     ? room.player2
                     : room.player1;
 
-            // Rakibe hamleyi gönder
+
+            // Hamleyi rakibe gönder
             send(other, {
+
                 type: 'action',
+
                 player,
+
                 action
+
             });
+
 
             // Sırayı değiştir
             room.turn =
@@ -279,16 +513,27 @@ wss.on('connection', (ws) => {
                     ? 2
                     : 1;
 
+
             return;
         }
 
-        // ODADAN ÇIK
+
+        // =========================
+        // ODADAN AYRIL
+        // =========================
+
         if (msg.type === 'leave') {
+
             leave(ws);
+
             return;
         }
 
+
+        // =========================
         // PING
+        // =========================
+
         if (msg.type === 'ping') {
 
             send(ws, {
@@ -297,25 +542,58 @@ wss.on('connection', (ws) => {
 
             return;
         }
+
     });
+
+
+    // ===========================
+    // BAĞLANTI KAPANDI
+    // ===========================
 
     ws.on('close', () => {
+
+        console.log(
+            'Oyuncu bağlantısı kapandı.'
+        );
+
         leave(ws);
     });
 
-    ws.on('error', () => {
+
+    ws.on('error', (error) => {
+
+        console.error(
+            'WebSocket hatası:',
+            error.message
+        );
+
         leave(ws);
     });
+
 });
 
+
+// ===============================
 // SERVER BAŞLAT
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(
-        `Quorix server listening on port ${PORT}`
-    );
-});
+// ===============================
 
-// Render bağlantısının canlı kalmasına yardımcı olur
+server.listen(
+    PORT,
+    '0.0.0.0',
+    () => {
+
+        console.log(
+            `Quorix server listening on port ${PORT}`
+        );
+
+    }
+);
+
+
+// ===============================
+// RENDER CANLI TUTMA
+// ===============================
+
 setInterval(() => {
 
     for (const ws of wss.clients) {
@@ -325,7 +603,9 @@ setInterval(() => {
             try {
                 ws.ping();
             } catch {}
+
         }
+
     }
 
 }, 25000);
