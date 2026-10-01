@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quorix</title>
+
+    <script>
+        (() => {
+            const ua = navigator.userAgent || '';
+            const mobileUA = /Android|iPhone|iPad|iPod|Windows Phone|webOS|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua);
+            const iPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+            const mobileByUAData = navigator.userAgentData && navigator.userAgentData.mobile === true;
+
+            if (mobileUA || iPadOS || mobileByUAData) {
+                document.documentElement.classList.add('mobile-device');
+            }
+        })();
+    </script>
     <style>
         :root {
             --cell-size: 54px;
@@ -21,6 +34,134 @@
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* ============================================================ */
+        /* === MOBİL SÜRÜM GEÇİCİ OLARAK KAPALI ===================== */
+        /* ============================================================ */
+        #mobile-block-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 50% 25%, rgba(130, 82, 36, .18), transparent 42%),
+                radial-gradient(circle at 50% 85%, rgba(70, 40, 18, .16), transparent 45%),
+                #080706;
+            color: #fff;
+            user-select: none;
+        }
+
+        .mobile-block-card {
+            width: min(560px, 100%);
+            padding: 42px 34px 36px;
+            text-align: center;
+            border: 1px solid rgba(211, 166, 101, .28);
+            border-radius: 24px;
+            background: linear-gradient(145deg, rgba(43, 29, 19, .97), rgba(18, 13, 9, .98));
+            box-shadow: 0 24px 80px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.05);
+        }
+
+        .mobile-block-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 18px;
+            display: grid;
+            place-items: center;
+            border-radius: 18px;
+            border: 1px solid rgba(211, 166, 101, .38);
+            background: linear-gradient(145deg, #3b291b, #19110b);
+            color: #d9b36c;
+            font-size: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.35);
+        }
+
+        .mobile-block-brand {
+            color: #d9b36c;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 5px;
+            margin-left: 5px;
+            margin-bottom: 8px;
+        }
+
+        .mobile-block-card h1 {
+            font-size: clamp(27px, 7vw, 38px);
+            line-height: 1.1;
+            margin-bottom: 10px;
+            letter-spacing: -.5px;
+        }
+
+        .mobile-block-status {
+            display: inline-block;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: rgba(211, 166, 101, .10);
+            border: 1px solid rgba(211, 166, 101, .22);
+            color: #d9b36c;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            margin-bottom: 24px;
+        }
+
+        .mobile-block-card p {
+            max-width: 470px;
+            margin: 0 auto 12px;
+            color: #c9c0b7;
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .mobile-block-divider {
+            width: 72px;
+            height: 1px;
+            margin: 24px auto 18px;
+            background: linear-gradient(90deg, transparent, #d9b36c, transparent);
+        }
+
+        .mobile-block-card .mobile-block-footer {
+            color: #e8dfd5;
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+
+        .mobile-block-team {
+            color: #8f8378;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+        }
+
+        html.mobile-device body {
+            display: block !important;
+            min-height: 100vh !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: #080706 !important;
+        }
+
+        html.mobile-device body > *:not(#mobile-block-screen) {
+            display: none !important;
+        }
+
+        html.mobile-device #mobile-block-screen {
+            display: flex !important;
+        }
+
+        @media (max-width: 480px) {
+            .mobile-block-card {
+                padding: 34px 22px 30px;
+                border-radius: 20px;
+            }
+
+            .mobile-block-card p {
+                font-size: 14px;
+            }
         }
 
         body {
@@ -690,16 +831,132 @@
 }
 .menu-subtitle{margin:13px 0 34px;color:#bda98f;font-size:15px;letter-spacing:2px;text-transform:uppercase}
 .menu-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(239,205,160,.22),transparent);margin-bottom:26px}
-.menu-section-title{color:#e8d4b4;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px}
-.menu-button{
-    width:100%; border:0; border-radius:15px; padding:17px 20px; cursor:pointer;
-    color:#fff4e2; font-size:18px; font-weight:850; letter-spacing:.3px;
-    background:linear-gradient(180deg,#8f6033 0%,#69421f 52%,#513117 100%);
-    box-shadow:0 9px 0 #301b0c, 0 15px 28px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,238,205,.3);
-    border:1px solid rgba(255,222,175,.2); transition:transform .12s,box-shadow .12s,filter .2s;
+.menu-section-title{color:#e8d4b4;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px} 
+/* === QUORIX CINEMATIC ANA MENÜ === */
+#mainMenu{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    background:#05080d;
 }
-.menu-button:hover{filter:brightness(1.12);transform:translateY(-2px);box-shadow:0 11px 0 #301b0c,0 18px 30px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,238,205,.3)}
-.menu-button:active{transform:translateY(5px);box-shadow:0 4px 0 #301b0c,0 8px 15px rgba(0,0,0,.35)}
+#mainMenu::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:url("assets/quorix_menu_clean.png") center/cover no-repeat;
+    z-index:0;
+}
+#mainMenu::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(90deg,rgba(0,0,0,.16),transparent 42%,rgba(0,0,0,.08)),
+               linear-gradient(180deg,rgba(0,0,0,.05),transparent 55%,rgba(0,0,0,.18));
+    z-index:1;
+    pointer-events:none;
+}
+.menu-card{
+    position:relative;
+    z-index:2;
+    width:min(920px,88vw);
+    padding:0;
+    background:transparent;
+    border:0;
+    box-shadow:none;
+    backdrop-filter:none;
+}
+.menu-mark,.menu-title,.menu-subtitle,.menu-divider,.menu-section-title,.menu-note{
+    display:none;
+}
+.menu-card{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(280px,390px));
+    gap:22px 28px;
+    justify-content:center;
+    align-items:center;
+}
+.menu-button{
+    position:relative;
+    display:block;
+    width:100%;
+    height:auto;
+    padding:0;
+    margin:0;
+    border:0;
+    border-radius:0;
+    background:transparent;
+    box-shadow:none;
+    cursor:pointer;
+    overflow:visible;
+    transition:transform .16s cubic-bezier(.2,.8,.2,1), filter .16s ease;
+    -webkit-tap-highlight-color:transparent;
+}
+.menu-button::after{
+    content:"";
+    position:absolute;
+    inset:5% 4%;
+    border-radius:18px;
+    background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.18),transparent 65%);
+    opacity:0;
+    filter:blur(12px);
+    transition:opacity .16s ease;
+    pointer-events:none;
+}
+.menu-button:hover{
+    transform:translateY(-5px) scale(1.012);
+    filter:brightness(1.06) drop-shadow(0 14px 18px rgba(0,0,0,.28));
+}
+.menu-button:hover::after{opacity:.55}
+.menu-button:active{
+    transform:translateY(4px) scale(.972);
+    filter:brightness(.9) drop-shadow(0 5px 8px rgba(0,0,0,.38));
+}
+.menu-button img{
+    display:block;
+    width:100%;
+    height:auto;
+    user-select:none;
+    pointer-events:none;
+}
+.player-name-menu-btn{
+    position:fixed;
+    top:24px;
+    right:28px;
+    width:auto;
+    min-width:170px;
+    z-index:110;
+    padding:11px 18px 11px 14px;
+    border-radius:999px;
+    color:#fff;
+    font-size:15px;
+    font-weight:850;
+    letter-spacing:.2px;
+    text-align:left;
+    background:rgba(7,13,22,.72);
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.1);
+    backdrop-filter:blur(12px);
+}
+.player-name-menu-btn::before{
+    content:"";
+    display:inline-block;
+    width:9px;
+    height:9px;
+    margin-right:9px;
+    border-radius:50%;
+    background:#55e49a;
+    box-shadow:0 0 10px rgba(85,228,154,.65);
+    vertical-align:middle;
+}
+.player-name-menu-btn:hover{
+    transform:translateY(-2px);
+    filter:brightness(1.08);
+}
+.player-name-menu-btn:active{transform:translateY(2px) scale(.98);}
 .menu-note{margin-top:24px;color:#796b5a;font-size:12px}
 .game-wrapper.menu-hidden{display:none}
 #gameScreen{display:flex;flex-direction:column;align-items:center;gap:24px}
@@ -846,24 +1103,122 @@ body {
 #volumeValue{width:48px;color:#fff;font-weight:800;text-align:right;}
 .settings-mute{width:100%;border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:13px 18px;color:#fff;font-size:16px;font-weight:800;cursor:pointer;background:linear-gradient(145deg,#46301f,#2d1d12);box-shadow:0 5px 0 #160d08;}
 .settings-close{margin-top:16px;background:transparent;border:0;color:#9d8b78;cursor:pointer;font-weight:700;padding:8px 16px;}
-.menu-settings-btn{margin-top:12px !important;background:linear-gradient(180deg,#5d4937,#403024) !important;}
+.menu-settings-btn{margin-top:0 !important;background:transparent !important;}
 </style>
+
+<style id="quorix-final-menu-fix">
+/* QUORIX MENÜ - SON DÜZELTME */
+#mainMenu{
+  position:fixed!important; inset:0!important; width:100vw!important; height:100vh!important;
+  display:flex!important; align-items:center!important; justify-content:center!important;
+  padding:0!important; overflow:hidden!important; background:#05080d!important;
+}
+#mainMenu::before{
+  content:""; position:absolute; inset:0; z-index:0;
+  background:url("assets/quorix_menu_clean.png") center center / cover no-repeat!important;
+}
+#mainMenu::after{
+  content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.04),transparent 55%,rgba(0,0,0,.16));
+}
+#mainMenu .menu-card{
+  position:relative!important; z-index:2!important;
+  width:min(760px,82vw)!important;
+  margin-top:clamp(90px,12vh,130px)!important;
+  padding:0!important;
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:14px 18px!important;
+  align-items:center!important; justify-content:center!important;
+  background:transparent!important; border:0!important; box-shadow:none!important;
+}
+#mainMenu .menu-button{
+  width:100%!important; min-width:0!important; padding:0!important; margin:0!important;
+  border:0!important; border-radius:0!important; background:transparent!important;
+  box-shadow:none!important; overflow:visible!important;
+  cursor:pointer!important; line-height:0!important;
+  transition:transform .14s cubic-bezier(.2,.8,.2,1),filter .14s ease!important;
+}
+#mainMenu .menu-button img{
+  display:block!important; width:100%!important; height:auto!important;
+  max-height:clamp(145px,20vh,190px)!important; object-fit:contain!important;
+  user-select:none!important; pointer-events:none!important;
+}
+#mainMenu .menu-button:hover{
+  transform:translateY(-4px) scale(1.015)!important;
+  filter:brightness(1.06) drop-shadow(0 10px 14px rgba(0,0,0,.35))!important;
+}
+#mainMenu .menu-button:active{
+  transform:translateY(3px) scale(.975)!important;
+  filter:brightness(.91) drop-shadow(0 4px 7px rgba(0,0,0,.4))!important;
+}
+#mainMenu .player-name-menu-btn{
+  position:fixed!important; top:22px!important; right:24px!important; z-index:5!important;
+  display:flex!important; align-items:center!important; gap:9px!important;
+  width:max-content!important; min-width:0!important; height:42px!important;
+  padding:0 17px!important; margin:0!important;
+  color:#fff!important; font:800 15px/1 system-ui,sans-serif!important;
+  white-space:nowrap!important; cursor:pointer!important;
+  background:rgba(9,15,23,.72)!important;
+  border:1px solid rgba(255,255,255,.17)!important;
+  border-radius:999px!important;
+  box-shadow:0 8px 22px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08)!important;
+  backdrop-filter:blur(12px)!important;
+  transition:transform .14s ease,background .14s ease!important;
+}
+#mainMenu .player-name-menu-btn::before{
+  content:""!important; display:block!important; flex:0 0 9px!important;
+  width:9px!important; height:9px!important; margin:0!important;
+  border-radius:50%!important; background:#55e49a!important;
+  box-shadow:0 0 10px rgba(85,228,154,.7)!important;
+}
+#mainMenu .player-name-menu-btn:hover{transform:translateY(-2px)!important; background:rgba(14,23,34,.84)!important;}
+#mainMenu .player-name-menu-btn:active{transform:translateY(1px) scale(.98)!important;}
+@media (max-width:850px){
+  #mainMenu .menu-card{width:min(680px,90vw)!important; margin-top:clamp(80px,13vh,110px)!important; gap:10px 12px!important;}
+  #mainMenu .menu-button img{max-height:clamp(105px,18vh,150px)!important;}
+  #mainMenu .player-name-menu-btn{top:14px!important; right:14px!important; height:38px!important; padding:0 13px!important; font-size:13px!important;}
+}
+@media (max-width:560px){
+  #mainMenu .menu-card{width:94vw!important; grid-template-columns:1fr!important; margin-top:8vh!important; gap:7px!important;}
+  #mainMenu .menu-button img{max-height:24vh!important;}
+  #mainMenu .player-name-menu-btn{top:10px!important; right:10px!important;}
+}
+</style>
+
 </head>
 <body>
 
+    <div id="mobile-block-screen" aria-label="Quorix mobil sürümü">
+        <div class="mobile-block-card">
+            <div class="mobile-block-icon" aria-hidden="true">▣</div>
+            <div class="mobile-block-brand">QUORIX</div>
+            <h1>Mobil Sürümü</h1>
+            <div class="mobile-block-status">ŞİMDİLİK KULLANILAMIYOR</div>
+            <p>Mobil sürümümüz, daha iyi bir oyun deneyimi sunabilmek için geliştirme sürecine alınmıştır.</p>
+            <p>Çok daha gelişmiş ve keyifli bir mobil deneyim için çalışmalarımız devam ediyor.</p>
+            <div class="mobile-block-divider"></div>
+            <p class="mobile-block-footer">Mobil sürümümüz en yakın zamanda daha güzel bir şekilde geri dönecek.</p>
+            <span class="mobile-block-team">Quorix Ekibi</span>
+        </div>
+    </div>
+
     <div id="mainMenu">
         <div class="menu-card">
-            <div class="menu-mark">🧱</div>
-            <div class="menu-title">QUORIX</div>
-            <div class="menu-subtitle">Strateji · Sabır · Yolunu Aç</div>
-            <div class="menu-divider"></div>
-            <div class="menu-section-title">Oyun Modu</div>
-            <button class="menu-button" id="localPlayBtn">🎮 2 Oyuncu — Aynı Bilgisayar</button>
-            <button class="menu-button" id="aiPlayBtn">🤖 Yapay Zekâya Karşı</button>
-            <button class="menu-button" id="onlinePlayBtn">🌐 Arkadaşlarla Oyna</button>
-            <button class="menu-button player-name-menu-btn" id="playerNameBtn">👤 İsim Değiştir</button>
-            <button class="menu-button menu-settings-btn" id="settingsBtn">⚙️ Ayarlar</button>
+            <button class="menu-button" id="aiPlayBtn" aria-label="Yapay zekâya karşı oyna">
+                <img src="assets/card_ai.webp" alt="Gemini AI'a karşı oyna">
+            </button>
+            <button class="menu-button" id="onlinePlayBtn" aria-label="Online oyna">
+                <img src="assets/card_online.webp" alt="Online oyna">
+            </button>
+            <button class="menu-button" id="localPlayBtn" aria-label="Yerel 2 oyunculu oyna">
+                <img src="assets/card_local.webp" alt="Yerel 2 oyunculu">
+            </button>
+            <button class="menu-button menu-settings-btn" id="settingsBtn" aria-label="Ayarlar ve kurallar">
+                <img src="assets/card_settings.webp" alt="Ayarlar ve kurallar">
+            </button>
         </div>
+        <div class="player-name-menu-btn" id="playerNameBtn" aria-label="Oyuncu adı" role="button" tabindex="0">Oyuncu</div>
     </div>
 
     <div class="difficulty-overlay" id="difficultyOverlay">
@@ -1105,10 +1460,17 @@ const board = document.getElementById('board');
 
         playerName = cleanPlayerName(playerName);
 
+
+        function updateMenuPlayerName(){
+            const btn=document.getElementById('playerNameBtn');
+            if(btn) btn.textContent = playerName && playerName !== 'Oyuncu' ? playerName : 'Oyuncu';
+        }
+
         function updatePlayerNameUI() {
             const red = document.getElementById('redPlayerName');
             const blue = document.getElementById('bluePlayerName');
             if (!red || !blue) return;
+            updateMenuPlayerName();
 
             if (onlineMode) {
                 red.textContent = '🔴 ' + cleanPlayerName(onlinePlayerNames[1]);
@@ -1150,6 +1512,9 @@ const board = document.getElementById('board');
             SFX.click();
         }
 
+        document.getElementById('playerNameBtn').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNameEditor(); }
+        });
         document.getElementById('playerNameBtn').addEventListener('click', () => {
             SFX.click();
             openNameEditor();
